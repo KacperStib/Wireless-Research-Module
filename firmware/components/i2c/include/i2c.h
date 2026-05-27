@@ -17,7 +17,7 @@
 #define I2C_MASTER_SCL_IO           3      // Numer GPIO dla linii zegarowej SCL
 #define I2C_MASTER_SDA_IO           2      // Numer GPIO dla linii danych SDA
 #define I2C_MASTER_NUM              0      // Numer portu I2C urzadzenia master
-#define I2C_MASTER_FREQ_HZ          400000 // Czestotliwosc taktowania magistrali I2C
+#define I2C_MASTER_FREQ_HZ          1000000 // Czestotliwosc taktowania magistrali I2C
 #define I2C_MASTER_TX_BUF_DISABLE   0      // Brak bufora TX dla trybu master
 #define I2C_MASTER_RX_BUF_DISABLE   0      // Brak bufora RX dla trybu master
 #define I2C_MASTER_TIMEOUT_MS       1000
@@ -46,6 +46,12 @@ esp_err_t i2c_read(uint8_t ADDR, uint8_t *buf, uint8_t bytesToReceive);
 
 // Zapis dwoch bajtow do rejestru
 esp_err_t i2c_write_2byte(uint8_t ADDR, uint8_t REG, uint16_t VAL);
+
+// Zapis i odczyt po kolei w jednej sekwencji
+esp_err_t i2c_write_read(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t bytesToReceive);
+
+// Superszybki odczyt na potrzeby profilowania energetycznego
+esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t len);
 
 // Funkcje obslugi wyswietlacza OLED
 void i2c_init(SSD1306_t * dev, int width, int height);

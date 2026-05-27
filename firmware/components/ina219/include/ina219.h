@@ -9,7 +9,10 @@
 #define INA219_H
 
 #include "i2c.h"
+#include "sd_card.h"
 #include <math.h>
+
+#include <esp_timer.h>
 
 #define INA219_ADDR             (0x40)
 #define INA219_REG_CONFIG       (0x00)
@@ -44,6 +47,8 @@ float ina219_read_current(void);
 float ina219_read_power(void);
 
 // Szukanie najwyzszego piku pradowego
-float ina219_find_peak(void);
+float ina219_find_peak(int64_t *rx_end);
+// Uchwycenie profilu pradowego a'la power profiler kit (nordic)
+float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_t *tx_end_time);
 
 #endif // INA219_H

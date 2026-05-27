@@ -1,4 +1,5 @@
 #include "ina219.h"
+#include "esp_task_wdt.h"
 
 // Globalne zmienne pomiarowe
 float current_mA = 0;
@@ -7,9 +8,9 @@ float current_mA_peak = 0;
 // Podstawowe parametry konfiguracyjne ukladu
 uint8_t ina_range = 0b1;     // Zakres napiecia bus: 32 V
 uint8_t ina_gain = 0b11;     // Wzmocnienie PGA: 320 mV
-uint8_t ina_b_res = 0b0000;  // Rozdzielczosc Bus: 12-bit
-uint8_t ina_s_res = 0b0000;  // Rozdzielczosc Shunt: 12-bit, 1 probka
-uint8_t ina_mode = 0b111;    // Tryb pracy: ciagly pomiar shunt i bus
+uint8_t ina_b_res = 0b0000;  // Szybko - 9 bit
+uint8_t ina_s_res = 0b0000;  // Szybko - 9 bit
+uint8_t ina_mode = 0b101;    // Wylaczamy pomiar napiecia !
 
 float currentLSB = 0, powerLSB = 0;
 
@@ -62,8 +63,10 @@ float ina219_read_voltage(void)
 float ina219_read_current(void)
 {
     uint8_t buf[2];
-    i2c_write_reg(INA219_ADDR, INA219_REG_CURRENT);
-    i2c_read(INA219_ADDR, buf, 2);
+    //i2c_write_reg(INA219_ADDR, INA219_REG_CURRENT);
+    //i2c_read(INA219_ADDR, buf, 2);
+    
+    i2c_write_read(INA219_ADDR, INA219_REG_CURRENT, buf, 2);
     
     // Konwersja bajtow na surowa wartosc pradu
     float current = (uint16_t)buf[0] * 256 + (uint16_t)buf[1];
@@ -90,7 +93,7 @@ float ina219_read_power(void)
 
 // Przeszukanie profilu pradowego w poszukiwaniu najwyzszego piku
 // Predkosc magistrali I2C podniesiona ze 100 kHz do 400 kHz w celu zvwiekszenia czestotliwosci probkowania
-float ina219_find_peak(void)
+float ina219_find_peak(int64_t *rx_end)
 {
     float peak = 0, sample;
     TickType_t t_end = xTaskGetTickCount() + pdMS_TO_TICKS(100);
@@ -102,8 +105,64 @@ float ina219_find_peak(void)
         { 
             peak = sample; 
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        
+        if (*rx_end == 0 && sample < 0.120f)
+        	*rx_end = esp_timer_get_time();
+        esp_rom_delay_us(100);
+        //vTaskDelay(pdMS_TO_TICKS(1));
     }
     
     return peak;
+}
+
+// Profilowanie energetyczne - przekaz strukture, czas trwania i wskaznik do zwrotu czasu piku
+float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_t *tx_end_time)
+{	
+	// Zmienne
+    float peak_mA = 0;
+    uint32_t idx = 0;
+    *tx_end_time = 0;
+
+    const float scale = currentLSB * 1000.0f;
+    const int64_t start_time = esp_timer_get_time();
+    const int64_t end_time   = start_time + ((int64_t)duration_ms * 1000);
+	
+	// Petla odczytu probek
+    while (idx < PROFILE_SAMPLES)
+    {	
+		// jedno wywołanie na iterację zeby nie zamulac
+        int64_t now = esp_timer_get_time(); 
+        if (now >= end_time) break;
+		
+		// Super szybki odczyt po i2c zeby nie zamulac
+        uint8_t buf[2];
+        esp_err_t ret = i2c_write_read_fast(INA219_ADDR, INA219_REG_CURRENT, buf, 2);
+        
+        // --- ZMIANA: Break całej funkcji przy błędzie ---
+        if (ret != ESP_OK) {
+            ESP_LOGE("RADIO", "Błąd I2C (0x%x), przerywam zbieranie profilu.", ret);
+            break; // Całkowite wyjście z pętli i funkcji
+        }
+        
+        int16_t raw       = (int16_t)((buf[0] << 8) | buf[1]);
+        float   sample_mA = raw * scale;
+		
+		// Detekcja piku
+        if (sample_mA > peak_mA) peak_mA = sample_mA;
+		
+		// Timestamp jesli to pik
+        if (*tx_end_time == 0 && sample_mA < 120.0f && idx > 10)
+            *tx_end_time = now;
+
+        prof->samples[idx].rel_time_us = (uint32_t)(now - start_time);
+        prof->samples[idx].current_mA  = sample_mA;
+        idx++;
+        // zero delay — I2C samo w sobie zajmuje ~90µs (nawet po 1 MHz)
+        if (idx % 50 == 0) {
+            vTaskDelay(pdMS_TO_TICKS(1)); 
+        }
+    }
+	taskYIELD();
+    prof->total_samples = idx;
+    return peak_mA;
 }

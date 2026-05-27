@@ -13,6 +13,8 @@ static bool s_wifi_initialized;
 
 int rssi = 0;
 
+uint32_t tx_time = 0;
+
 // Callbacki ESP-NOW
 // Przy wysylce
 static void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status)

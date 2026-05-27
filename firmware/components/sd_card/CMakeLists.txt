@@ -1,4 +1,4 @@
 idf_component_register(SRCS "sd_card.c"
                     INCLUDE_DIRS "include" 
-                    REQUIRES fatfs sd_card)
+                    REQUIRES fatfs sd_card esp_timer ina219)
 

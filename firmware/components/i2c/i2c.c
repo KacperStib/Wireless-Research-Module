@@ -117,6 +117,56 @@ esp_err_t i2c_write_2byte(uint8_t ADDR, uint8_t REG, uint16_t VAL)
     return err;
 }
 
+// Zapis - odczyt w jednym linku
+esp_err_t i2c_write_read(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t bytesToReceive)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    
+    // Zapis adresu rejestru 
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ADDR << 1) | I2C_MASTER_WRITE, ACK_EN);
+    i2c_master_write_byte(cmd, REG, ACK_EN);
+    
+    // Ponowny start i odczyt danych 
+    i2c_master_start(cmd); // REPEATED START
+    i2c_master_write_byte(cmd, (ADDR << 1) | I2C_MASTER_READ, ACK_EN);
+    i2c_master_read(cmd, buf, bytesToReceive, I2C_MASTER_LAST_NACK);
+    
+    i2c_master_stop(cmd);
+    
+    // Wykonanie całej transakcji sprzętowo za jednym zamachem
+    err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(10));
+    i2c_cmd_link_delete(cmd);
+    
+    return err;
+}
+
+// Super szybki zapis i odczyt w jednej sekwencji
+esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t len)
+{
+    // Makro I2C_LINK_RECOMMENDED_SIZE(n) — n = liczba komend w linku
+    // Mamy: start, write, write, start, write, read, stop = 7 komend
+    uint8_t i2c_cmd_buf[I2C_LINK_RECOMMENDED_SIZE(7)];
+	
+	// Static przyspiesza cala operacja o ~ 100 us !
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create_static(i2c_cmd_buf, sizeof(i2c_cmd_buf));
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ADDR << 1) | I2C_MASTER_WRITE, ACK_EN);
+    i2c_master_write_byte(cmd, REG, ACK_EN);
+    
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ADDR << 1) | I2C_MASTER_READ, ACK_EN);
+    i2c_master_read(cmd, buf, len, I2C_MASTER_LAST_NACK);
+    
+    i2c_master_stop(cmd);
+
+    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(10));
+    i2c_cmd_link_delete_static(cmd);
+
+    return ret;
+}
+
 /*---------- Funkcje dla ekranu OLED ----------*/
 // Zapozyczone z biblioteki "ssd1306.h""
 
