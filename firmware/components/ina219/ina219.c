@@ -158,11 +158,11 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
         prof->samples[idx].current_mA  = sample_mA;
         idx++;
         // zero delay — I2C samo w sobie zajmuje ~90µs (nawet po 1 MHz)
-        if (idx % 50 == 0) {
-            vTaskDelay(pdMS_TO_TICKS(1)); 
+        if (idx % 75 == 0) {
+            vTaskDelay(1); 
         }
     }
-	taskYIELD();
+	
     prof->total_samples = idx;
     return peak_mA;
 }

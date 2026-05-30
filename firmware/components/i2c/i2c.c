@@ -4,9 +4,13 @@
 
 esp_err_t err = ESP_OK;
 
+SemaphoreHandle_t i2c_mutex = NULL;
+
 // Inicjalizacja
 esp_err_t i2c_master_init(void)
-{
+{	
+	// Utworz Mutex
+	i2c_mutex = xSemaphoreCreateMutex();
     // Konfiguracja magistrali
     int i2c_master_port = I2C_MASTER_NUM;
     i2c_config_t conf = {
@@ -26,12 +30,16 @@ esp_err_t i2c_master_init(void)
     }
 	
     // Instalacja sterownika magistrali
-    return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    err = i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    err = i2c_filter_enable(I2C_MASTER_NUM, 7);
+    return err;
 }
 
 // Zapis jednego bajtu adresowego (wybór rejestru)
 esp_err_t i2c_write_reg(uint8_t ADDR, uint8_t REG)
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
     // Zabranie zasobow
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     
@@ -50,12 +58,17 @@ esp_err_t i2c_write_reg(uint8_t ADDR, uint8_t REG)
     // Wykonanie komendy i zwolnienie zasobow
     err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(1000));
     i2c_cmd_link_delete(cmd);
+    
+    xSemaphoreGive(i2c_mutex);
     return err;
 }
 
 // Zapis jednego bajtu wartosci do rejestru
 esp_err_t i2c_write_val(uint8_t ADDR, uint8_t REG, uint8_t VAL)
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+        
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     
     i2c_master_start(cmd);
@@ -69,12 +82,17 @@ esp_err_t i2c_write_val(uint8_t ADDR, uint8_t REG, uint8_t VAL)
     
     err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(1000));
     i2c_cmd_link_delete(cmd);
+    
+    xSemaphoreGive(i2c_mutex);
     return err;
 }
 
 // Odczyt danych do bufora
 esp_err_t i2c_read(uint8_t ADDR, uint8_t *buf, uint8_t bytesToReceive)
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+        
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     
     i2c_master_start(cmd);
@@ -89,12 +107,17 @@ esp_err_t i2c_read(uint8_t ADDR, uint8_t *buf, uint8_t bytesToReceive)
     
     err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(1000));
     i2c_cmd_link_delete(cmd);
+    
+    xSemaphoreGive(i2c_mutex);
     return err;
 }
 
 // Zapis dwoch bajtow 
 esp_err_t i2c_write_2byte(uint8_t ADDR, uint8_t REG, uint16_t VAL)
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+        
     // Podzial 2 bajtow uint16_t do przeslania na 2 oddzielne bajty uint8_t
     uint8_t bytes[2];
     bytes[0] = VAL >> 8;
@@ -114,12 +137,17 @@ esp_err_t i2c_write_2byte(uint8_t ADDR, uint8_t REG, uint16_t VAL)
     
     err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(1000));
     i2c_cmd_link_delete(cmd);
+    
+    xSemaphoreGive(i2c_mutex);
     return err;
 }
 
 // Zapis - odczyt w jednym linku
 esp_err_t i2c_write_read(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t bytesToReceive)
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+        
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     
     // Zapis adresu rejestru 
@@ -138,12 +166,16 @@ esp_err_t i2c_write_read(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t bytesT
     err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(10));
     i2c_cmd_link_delete(cmd);
     
+    xSemaphoreGive(i2c_mutex);
     return err;
 }
 
 // Super szybki zapis i odczyt w jednej sekwencji
 esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t len)
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+        
     // Makro I2C_LINK_RECOMMENDED_SIZE(n) — n = liczba komend w linku
     // Mamy: start, write, write, start, write, read, stop = 7 komend
     uint8_t i2c_cmd_buf[I2C_LINK_RECOMMENDED_SIZE(7)];
@@ -163,7 +195,8 @@ esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t l
 
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(10));
     i2c_cmd_link_delete_static(cmd);
-
+	
+	xSemaphoreGive(i2c_mutex);
     return ret;
 }
 
@@ -172,7 +205,10 @@ esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t l
 
 // Inicjalizacja ekranu poprzez I2C
 void i2c_init(SSD1306_t * dev, int width, int height) 
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return;
+        
     dev->_address = I2C_ADDRESS;
     dev->_flip = false;
     dev->_i2c_num = I2C_MASTER_NUM;
@@ -259,11 +295,15 @@ void i2c_init(SSD1306_t * dev, int width, int height)
         ESP_LOGE(TAG, "OLED configuration failed. code: 0x%.2X", res);
     }
     i2c_cmd_link_delete(cmd);
+    xSemaphoreGive(i2c_mutex);
 }
 
 // Wyswietlanie grafiki na ekranie poprzez I2C
 void i2c_display_image(SSD1306_t * dev, int page, int seg, const uint8_t * images, int width) 
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return;
+        
     if (page >= dev->_pages) 
     {
         return;
@@ -316,11 +356,15 @@ void i2c_display_image(SSD1306_t * dev, int page, int seg, const uint8_t * image
         ESP_LOGE(TAG, "Image command failed. code: 0x%.2X", res);
     }
     i2c_cmd_link_delete(cmd);
+    xSemaphoreGive(i2c_mutex);
 }
 
 // Ustawienie kontrastu wyswietlacza poprzez I2C
 void i2c_contrast(SSD1306_t * dev, int contrast) 
-{
+{	
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return;
+        
     int _contrast = contrast;
     if (contrast < 0x0) 
     {
@@ -345,4 +389,5 @@ void i2c_contrast(SSD1306_t * dev, int contrast)
         ESP_LOGE(TAG, "Contrast command failed. code: 0x%.2X", res);
     }
     i2c_cmd_link_delete(cmd);
+    xSemaphoreGive(i2c_mutex);
 }

@@ -71,7 +71,8 @@ esp_err_t s_example_read_file(const char *path);
 bool file_exists(const char *path);
 
 // Funkcja pomocnicza do zapisu zdarzenia do kolejki logow
-esp_err_t sd_log_event(bool tech, bool is_tx, float current_mA_peak, int rssi, bool gps_fix, float gps_lat, float gps_lon);
+esp_err_t sd_log_event(const char *tech, bool is_tx, float current_mA_peak, int rssi, bool gps_fix, float gps_lat, float gps_lon);
+void sd_save_event_to_csv(const log_event_t *ev);
 
 // Funkcja pomocnicza do zapisu zdarzen do kolejki profilowania energetycznego
 void sd_capture_and_log_profile(const char* tech, uint32_t duration_ms, int64_t *tx_end_time, int64_t t_start, float *current_mA_peak);

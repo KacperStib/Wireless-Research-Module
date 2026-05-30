@@ -122,37 +122,13 @@ void vLogTask(void *pv)
     for (;;) 
     {
 		// 1. Kolejka ogolnych logow
-		if (xQueueReceive(xLogQueue, &ev, portMAX_DELAY) == pdTRUE) 
-		{	
-			// Dodatkowo sprawdz czy karta jest zainicjalizowana
-	        if (!sd_card_ready) 
-	        {
-	            sd_card_init();
-	            snprintf(LOG_FILE_NAME, sizeof(LOG_FILE_NAME), "%s/log.txt", MOUNT_POINT);
-	            s_example_write_file((const char*)LOG_FILE_NAME, "Measurements:");
-	        }
-	
-	        char buf[80];
-	        //const char *tech = radio_cfg.tech == RADIO_TECH_LORA ? "LORA" : "ESPNOW";
-			// Wyluskaj informacje dla TX
-	        if (!ev.is_tx) 
-	        {
-	            snprintf(buf, sizeof(buf), "%s RX RSSI:%d%s\n",
-	                ev.tech,
-	                ev.rssi,
-	                ev.has_gps ? ({static char g[32]; snprintf(g,sizeof(g)," LAT:%.5f LON:%.5f",gps_lat,gps_lon); g;}) : "");
-	        } 
-	        // Wyluskaj informacje dla RX
-	        else 
-	        {
-	            snprintf(buf, sizeof(buf), "%s TX CURR:%.2f%s\n",
-	                ev.tech,
-	                ev.peak_mA,
-	                ev.has_gps ? ({static char g[32]; snprintf(g,sizeof(g)," LAT:%.5f LON:%.5f",gps_lat,gps_lon); g;}) : "");
-	        }
-			// Zapisz log na karcie SD
-	        s_example_append_file((const char*)LOG_FILE_NAME, buf);
-	    }
+		if (xQueueReceive(xLogQueue, &ev, portMAX_DELAY) == pdTRUE)
+        {
+            if (!sd_card_ready)
+                sd_card_init();
+
+            sd_save_event_to_csv(&ev);
+        }
 	    
 	    // 2. Kolejka logow profilowania pradowego
 	    if (xQueueReceive(xProfileQueue, &pp, 0) == pdTRUE) 
@@ -199,7 +175,7 @@ void vRadioTask(void *pv)
 			    }
 			
 			    // Log tekstowy do pliku log.txt
-			    sd_log_event(true, true, current_mA_peak, 0, gps_fix, gps_lat, gps_lon);
+			    sd_log_event("LORA",  true,  current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
 			
 			    vTaskDelay(pdMS_TO_TICKS(6000));
 		  	}
@@ -214,7 +190,7 @@ void vRadioTask(void *pv)
 					// Zmierz RSSI
 					rssi = (int)lora_packet_rssi();
 					// Wrzuc log do kolejki dla karty SD
-					sd_log_event (true, false, 0, rssi, gps_fix, gps_lat, gps_lon);
+					sd_log_event("LORA",  false, 0,               rssi, gps_fix, gps_lat, gps_lon);
 					ESP_LOGI(pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen, buf8);
 					
 				}
@@ -246,7 +222,7 @@ void vRadioTask(void *pv)
                 }
                 
                 // Zapis zdarzenia do ogólnego logu
-                sd_log_event(false, true, current_mA_peak, 0, gps_fix, gps_lat, gps_lon);
+                sd_log_event("ESPNOW", true, current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
                 
                 vTaskDelay(pdMS_TO_TICKS(6000));
 		  	}
@@ -283,7 +259,7 @@ void app_main(void)
 	radio_apply_config();
 
 	// Urchomienie i config ina219
-	ina219_power_on(0.1, 3.2);
+	ina219_power_on(0.05, 6.4);
 	if (err != ESP_OK)
     	ESP_LOGE("INA219", "I2C CMD ERROR: 0x%x", err);	
 	vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -297,8 +273,8 @@ void app_main(void)
 	
 	// Inicjalizacja SD karty
 	sd_card_init();
-	snprintf(LOG_FILE_NAME, sizeof(LOG_FILE_NAME), "%s/log.txt", MOUNT_POINT);
-	s_example_write_file((const char*)LOG_FILE_NAME, "Measurements:");
+	//snprintf(LOG_FILE_NAME, sizeof(LOG_FILE_NAME), "%s/log.txt", MOUNT_POINT);
+	//s_example_write_file((const char*)LOG_FILE_NAME, "Measurements:");
 	
 	// Inicjalizacja handlera GPS - tworzy task GPS
 	/* NMEA parser configuration */

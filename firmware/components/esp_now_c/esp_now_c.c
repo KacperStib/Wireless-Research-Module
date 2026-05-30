@@ -26,7 +26,7 @@ static void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status)
 static void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {	
     rssi = info->rx_ctrl->rssi; 
-    sd_log_event(false, false, 0, rssi, gps_fix, gps_lat, gps_lon);
+    sd_log_event("ESPNOW", false, 0, rssi,   gps_fix, gps_lat, gps_lon);
 	
     ESP_LOGD(TAG, "RX %d B od " MACSTR, len, MAC2STR(info->src_addr));
     

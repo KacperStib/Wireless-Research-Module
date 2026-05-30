@@ -129,36 +129,59 @@ bool file_exists(const char *path)
 }
 
 // Sformatowanie zdarzenia i wyslanie go do kolejki logowania SD
-esp_err_t sd_log_event(bool tech, bool is_tx, float current_mA_peak, int rssi, bool gps_fix, float gps_lat, float gps_lon)
+esp_err_t sd_log_event(const char *tech, bool is_tx, float current_mA_peak, int rssi,
+                       bool gps_fix, float gps_lat, float gps_lon)
 {
     log_event_t ev = {
-        .has_gps  = gps_fix,
-        .lat      = gps_lat,
-        .lon      = gps_lon,
+        .is_tx   = is_tx,
+        .peak_mA = current_mA_peak,
+        .rssi    = rssi,
+        .has_gps = gps_fix,
+        .lat     = gps_lat,
+        .lon     = gps_lon,
     };
-		
-    if (is_tx)
-    {
-        // Konfiguracja struktury dla zdarzenia nadawczego TX
-        ev.is_tx    = true;
-        ev.peak_mA  = current_mA_peak;
-        strncpy(ev.tech, tech ? "LORA" : "ESPNOW", sizeof(ev.tech));
-    }
-    else 
-    {
-        // Konfiguracja struktury dla zdarzenia odbiorczego RX
-        ev.is_tx   = false;
-        ev.rssi    = rssi;
-        strncpy(ev.tech, tech ? "LORA" : "ESPNOW", sizeof(ev.tech));
-    }
-	
-    // Przeslanie gotowego obiektu zdarzenia do kolejki logow
+    strncpy(ev.tech, tech, sizeof(ev.tech) - 1);
+    ev.tech[sizeof(ev.tech) - 1] = '\0';
+
     if (xQueueSend(xLogQueue, &ev, 0) != pdTRUE)
-    {
-        return ESP_ERR_NO_MEM; // Kolejka jest pelna
-    }
-        
+        return ESP_ERR_NO_MEM;
+
     return ESP_OK;
+}
+
+#define EVENTS_FILE MOUNT_POINT "/events.csv"
+
+void sd_save_event_to_csv(const log_event_t *ev)
+{
+    if (!sd_card_ready) return;
+
+    // Przy pierwszym zapisie — sprawdź czy plik istnieje, jeśli nie to dodaj nagłówek
+    bool write_header = false;
+    FILE *check = fopen(EVENTS_FILE, "r");
+    if (check == NULL)
+        write_header = true;
+    else
+        fclose(check);
+
+    FILE *f = fopen(EVENTS_FILE, "a");
+    if (f == NULL) {
+        ESP_LOGE("SD", "Nie udalo sie otworzyc events.csv!");
+        return;
+    }
+
+    if (write_header)
+        fprintf(f, "Tech,Dir,Peak_mA,RSSI,GPS,Lat,Lon\n");
+
+    fprintf(f, "%s,%s,%.2f,%d,%s,%.5f,%.5f\n",
+        ev->tech,
+        ev->is_tx ? "TX" : "RX",
+        ev->is_tx ? ev->peak_mA : 0.0f,
+        ev->is_tx ? 0 : ev->rssi,
+        ev->has_gps ? "Y" : "N",
+        ev->has_gps ? ev->lat : 0.0f,
+        ev->has_gps ? ev->lon : 0.0f);
+
+    fclose(f);
 }
 
 // Wylap probki do profilowania energetycznego i wrzuc do kolejki
