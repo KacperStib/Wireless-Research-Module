@@ -26,6 +26,14 @@ typedef enum {
     RADIO_DIR_TX = 1  // Nadajnik
 } radio_dir_t;
 
+// Przeprowadzane testy
+typedef enum {
+	TEST_IDLE = 0,
+	TEST_GENERAL = 1,
+	TEST_POWER = 2,
+	TEST_PER = 3
+} test_scenario_t;
+
 // Parametry fizyczne modulu LoRa
 typedef struct {
     uint8_t sf;  // Spreading Factor 
@@ -40,6 +48,7 @@ typedef struct {
     radio_dir_t  dir;         // Tryb pracy 
     uint8_t      peer_mac[6]; // Adres MAC dla ESP-NOW
     lora_config_t lora;       // Ustawienia szczegolowe LoRa
+    test_scenario_t test;
 } radio_config_t;
 
 // Globalna zmienna z konfiguracja radia

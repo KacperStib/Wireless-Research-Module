@@ -194,7 +194,11 @@ void sd_capture_and_log_profile(const char* tech, uint32_t duration_ms, int64_t 
     strncpy(tx_profile.tech, tech, sizeof(tx_profile.tech) - 1);
     
     // Zapisz próbki bezpośrednio do struktury modułu SD i odczytaj pik
-    *current_mA_peak = ina219_capture_profile(&tx_profile, duration_ms, tx_end_time);
+    float peak = ina219_capture_profile(&tx_profile, duration_ms, tx_end_time);
+
+	if (current_mA_peak != NULL) {
+	    *current_mA_peak = peak; // Zapisujemy do wskaźnika TYLKO gdy nie jest NULL-em!
+	}
     
     // Wypychnij do kolejki
     xQueueSend(xProfileQueue, &tx_profile, 0);

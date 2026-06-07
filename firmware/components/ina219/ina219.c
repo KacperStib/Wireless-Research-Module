@@ -95,24 +95,22 @@ float ina219_read_power(void)
 // Predkosc magistrali I2C podniesiona ze 100 kHz do 400 kHz w celu zvwiekszenia czestotliwosci probkowania
 float ina219_find_peak(int64_t *rx_end)
 {
-    float peak = 0, sample;
-    TickType_t t_end = xTaskGetTickCount() + pdMS_TO_TICKS(100);
+    float peak = 0, sample = 0;
+    TickType_t t_start = xTaskGetTickCount();
+    TickType_t t_end = t_start + pdMS_TO_TICKS(100);
 	
     while (xTaskGetTickCount() < t_end) 
     {
         sample = ina219_read_current();
-        if (sample > peak)
-        { 
-            peak = sample; 
-        }
+        if (sample > peak) peak = sample; 
+
+        // Bezpiecznik: jesli prąd spadl poniżej progu
+        if (*rx_end == 0 && sample < 0.12f) break;
         
-        if (*rx_end == 0 && sample < 0.120f)
-        	*rx_end = esp_timer_get_time();
-        esp_rom_delay_us(100);
-        //vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(1);
     }
-    
-    return peak;
+    *rx_end = esp_timer_get_time();
+    return peak * 1000;
 }
 
 // Profilowanie energetyczne - przekaz strukture, czas trwania i wskaznik do zwrotu czasu piku
@@ -121,7 +119,9 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
 	// Zmienne
     float peak_mA = 0;
     uint32_t idx = 0;
-    *tx_end_time = 0;
+    if (tx_end_time != NULL) {
+        *tx_end_time = 0;
+    }
 
     const float scale = currentLSB * 1000.0f;
     const int64_t start_time = esp_timer_get_time();
@@ -130,7 +130,7 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
 	// Petla odczytu probek
     while (idx < PROFILE_SAMPLES)
     {	
-		// jedno wywołanie na iterację zeby nie zamulac
+		// jedno wywołanie na iteracje zeby nie zamulac
         int64_t now = esp_timer_get_time(); 
         if (now >= end_time) break;
 		
@@ -138,10 +138,10 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
         uint8_t buf[2];
         esp_err_t ret = i2c_write_read_fast(INA219_ADDR, INA219_REG_CURRENT, buf, 2);
         
-        // --- ZMIANA: Break całej funkcji przy błędzie ---
+        // Break całej funkcji przy bledzie 
         if (ret != ESP_OK) {
             ESP_LOGE("RADIO", "Błąd I2C (0x%x), przerywam zbieranie profilu.", ret);
-            break; // Całkowite wyjście z pętli i funkcji
+            break; // Calkowite wyjscie z petli i funkcji
         }
         
         int16_t raw       = (int16_t)((buf[0] << 8) | buf[1]);
@@ -151,15 +151,17 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
         if (sample_mA > peak_mA) peak_mA = sample_mA;
 		
 		// Timestamp jesli to pik
-        if (*tx_end_time == 0 && sample_mA < 120.0f && idx > 10)
+        if (tx_end_time != NULL && *tx_end_time == 0 && sample_mA < 120.0f && idx > 10)
             *tx_end_time = now;
 
         prof->samples[idx].rel_time_us = (uint32_t)(now - start_time);
         prof->samples[idx].current_mA  = sample_mA;
         idx++;
+        
         // zero delay — I2C samo w sobie zajmuje ~90µs (nawet po 1 MHz)
         if (idx % 75 == 0) {
             vTaskDelay(1); 
+            esp_err_t ret = i2c_write_read_fast(INA219_ADDR, INA219_REG_CURRENT, buf, 2);
         }
     }
 	

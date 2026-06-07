@@ -161,8 +161,14 @@ void vRadioTask(void *pv)
 			    // Start nadawania
 			    lora_send_packet(buf8, send_len); 
 			    
-			    // Wywolanie funkcji z sd_card, ktora sama podstawi strukture
-			    sd_capture_and_log_profile("LORA", 50, &t_end_tx, t_start, &current_mA_peak); 
+			    if (radio_cfg.test == TEST_POWER)
+			    	// Wywolanie funkcji z sd_card, ktora sama podstawi strukture
+			    	sd_capture_and_log_profile("LORA", 50, &t_end_tx, t_start, &current_mA_peak); 
+			    else
+			    {
+					vTaskDelay(10 / portTICK_PERIOD_MS); 			// Opoznienie zeby zlapac pik (LoRa jest wolniejsza)
+			    	current_mA_peak = ina219_find_peak(&t_end_tx);
+			    }
 			    
 			    // Obliczanie czasu nadawania (tx_time)
 			    if (t_end_tx != 0) 
@@ -173,9 +179,10 @@ void vRadioTask(void *pv)
 			    {
 			        tx_time = (uint32_t)(esp_timer_get_time() - t_start);
 			    }
-			
-			    // Log tekstowy do pliku log.txt
-			    sd_log_event("LORA",  true,  current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
+				
+				if (radio_cfg.test == TEST_GENERAL)
+			    	// Log tekstowy do pliku log.txt
+			    	sd_log_event("LORA",  true,  current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
 			
 			    vTaskDelay(pdMS_TO_TICKS(6000));
 		  	}
@@ -189,8 +196,17 @@ void vRadioTask(void *pv)
 					int rxLen = lora_receive_packet(buf8, sizeof(buf8));
 					// Zmierz RSSI
 					rssi = (int)lora_packet_rssi();
-					// Wrzuc log do kolejki dla karty SD
-					sd_log_event("LORA",  false, 0,               rssi, gps_fix, gps_lat, gps_lon);
+					
+					if (radio_cfg.test == TEST_GENERAL)
+						// Wrzuc log do kolejki dla karty SD
+						sd_log_event("LORA",  false, 0,               rssi, gps_fix, gps_lat, gps_lon);
+					
+					if (radio_cfg.test == TEST_POWER)
+					{
+						vTaskDelay(200 / portTICK_PERIOD_MS);
+						sd_capture_and_log_profile("LORA", 100, NULL, NULL, NULL);
+					}
+					
 					ESP_LOGI(pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen, buf8);
 					
 				}
@@ -211,9 +227,12 @@ void vRadioTask(void *pv)
                 // Start nadawania ESP-NOW
                 espnow_send(buf8, len);
                 
-                // Agresywne próbkowanie prądu dla ESP-NOW. 
-                sd_capture_and_log_profile("ESPN", 5, &t_end_tx, t_start, &current_mA_peak);
-                
+                if (radio_cfg.test == TEST_POWER)
+                	// Agresywne próbkowanie prądu dla ESP-NOW. 
+                	sd_capture_and_log_profile("ESPNOW", 5, &t_end_tx, t_start, &current_mA_peak);
+                else
+			    	current_mA_peak = ina219_find_peak(&t_end_tx);
+			    	
                 // Obliczanie czasu nadawania (tx_time)
                 if (t_end_tx != 0) {
                     tx_time = (uint32_t)(t_end_tx - t_start);
@@ -221,8 +240,9 @@ void vRadioTask(void *pv)
                     tx_time = (uint32_t)(esp_timer_get_time() - t_start);
                 }
                 
-                // Zapis zdarzenia do ogólnego logu
-                sd_log_event("ESPNOW", true, current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
+                if (radio_cfg.test == TEST_GENERAL)
+                	// Zapis zdarzenia do ogólnego logu
+                	sd_log_event("ESPNOW", true, current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
                 
                 vTaskDelay(pdMS_TO_TICKS(6000));
 		  	}
@@ -289,8 +309,8 @@ void app_main(void)
 	xProfileQueue = xQueueCreate(2, sizeof(power_profile_t));
 	
 	// Rozpocznij Zadania
-	xTaskCreate(vRadioTask,  "RADIO",  8192, NULL, 5, NULL);
-	xTaskCreate(vLogTask,  "SD",  8192, NULL, 1, NULL);
+	xTaskCreate(vRadioTask,  "RADIO",  12288, NULL, 5, NULL);
+	xTaskCreate(vLogTask,  "SD",  12288, NULL, 1, NULL);
 	xTaskCreate(vPowerTask,  "PWR",  2048, NULL, 2, NULL);
 	xTaskCreate(vOledTask,  "OLED",  4096, NULL, 3, NULL);
 	

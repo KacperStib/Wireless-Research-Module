@@ -26,8 +26,15 @@ static void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status)
 static void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {	
     rssi = info->rx_ctrl->rssi; 
-    sd_log_event("ESPNOW", false, 0, rssi,   gps_fix, gps_lat, gps_lon);
+    if (radio_cfg.test == TEST_GENERAL)
+   		sd_log_event("ESPNOW", false, 0, rssi,   gps_fix, gps_lat, gps_lon);
 	
+	if (radio_cfg.test == TEST_POWER)
+	{
+		vTaskDelay(200 / portTICK_PERIOD_MS);
+		sd_capture_and_log_profile("ESPNOW", 100, NULL, NULL, NULL);
+	}
+
     ESP_LOGD(TAG, "RX %d B od " MACSTR, len, MAC2STR(info->src_addr));
     
     if (s_rx_cb)
@@ -55,7 +62,7 @@ esp_err_t espnow_init(espnow_rx_cb_t rx_callback)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA/*,  WIFI_PROTOCOL_LR*/));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     // Inicjalizacja ESP-NOW i rejestracja funkcji zwrotnych

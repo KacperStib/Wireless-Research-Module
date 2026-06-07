@@ -151,6 +151,16 @@ static int cmd_mymac(int argc, char **argv)
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler komendy: config <show|save|load>
 // ─────────────────────────────────────────────────────────────────────────────
+// Funkcja pomocnicza do wyswietlenia testu
+const char* test_to_str(test_scenario_t test) {
+	switch (test) {
+	    case TEST_IDLE:    return "idle";
+	    case TEST_GENERAL: return "general";
+	    case TEST_POWER:   return "power";
+	    case TEST_PER:     return "per";
+	    default:           return "unknown";
+	}
+}
 static int cmd_config(int argc, char **argv)
 {
     if (argc < 2) 
@@ -166,6 +176,7 @@ static int cmd_config(int argc, char **argv)
         printf("  tech:     %s\n", radio_cfg.tech == RADIO_TECH_LORA ? "lora" : "espnow");
         printf("  dir:      %s\n", radio_cfg.dir == RADIO_DIR_TX ? "tx" : "rx");
         printf("  peer_mac: " MACSTR "\n", MAC2STR(radio_cfg.peer_mac));
+        printf("  test:     %s\n", test_to_str(radio_cfg.test));
         return 0;
     }
 
@@ -202,6 +213,7 @@ static int cmd_config(int argc, char **argv)
         printf("  tech:     %s\n", radio_cfg.tech == RADIO_TECH_LORA ? "lora" : "espnow");
         printf("  dir:      %s\n", radio_cfg.dir == RADIO_DIR_TX ? "tx" : "rx");
         printf("  peer_mac: " MACSTR "\n", MAC2STR(radio_cfg.peer_mac));
+        printf("  test:     %s\n", test_to_str(radio_cfg.test));
         return 0;
     }
 
@@ -266,6 +278,32 @@ static int cmd_lora(int argc, char **argv)
 
     radio_apply_config();
     printf("OK\n");
+    return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Handler komendy: test[idle|general|power|per] 
+// ─────────────────────────────────────────────────────────────────────────────
+static int cmd_test(int argc, char **argv)
+{
+    if (argc < 2) 
+    {
+        printf("Aktualny test: %s\n", test_to_str(radio_cfg.test));
+        printf("Dostepne: idle, general, power, per\n");
+        return 0;
+    }
+
+    if      (strcmp(argv[1], "idle")    == 0) radio_cfg.test = TEST_IDLE;
+    else if (strcmp(argv[1], "general") == 0) radio_cfg.test = TEST_GENERAL;
+    else if (strcmp(argv[1], "power")   == 0) radio_cfg.test = TEST_POWER;
+    else if (strcmp(argv[1], "per")     == 0) radio_cfg.test = TEST_PER;
+    else 
+    {
+        printf("Nieznany test: '%s'\n", argv[1]);
+        return 1;
+    }
+
+    printf("Test ustawiony na: %s\n", argv[1]);
     return 0;
 }
 
@@ -378,4 +416,11 @@ void console_radio_register(void)
 	    .help    = "Lista taskow FreeRTOS z watermarkiem stosu",
 	    .func    = cmd_tasks,
 	}));
+	
+	ESP_ERROR_CHECK(esp_console_cmd_register(&(esp_console_cmd_t){
+        .command = "test",
+        .help    = "Ustaw scenariusz testowy: test <idle|general|power|per>",
+        .hint    = "<idle|general|power|per>",
+        .func    = cmd_test,
+    }));
 }
