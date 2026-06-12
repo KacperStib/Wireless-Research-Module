@@ -19,12 +19,6 @@
 #include "sd_card.h"
 #include "gps.h"
 
-// Zmienna przechowujaca RSSI
-extern int rssi;
-
-// Zmienna czasu nadawania
-extern uint32_t tx_time;
-
 // Callback wywolywany gdy przyjdzie pakiet ESP-NOW
 typedef void (*espnow_rx_cb_t)(const uint8_t *data, int len);
 

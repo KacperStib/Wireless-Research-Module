@@ -157,6 +157,7 @@ const char* test_to_str(test_scenario_t test) {
 	    case TEST_IDLE:    return "idle";
 	    case TEST_GENERAL: return "general";
 	    case TEST_POWER:   return "power";
+	    case TEST_SPEED:   return "speed";
 	    case TEST_PER:     return "per";
 	    default:           return "unknown";
 	}
@@ -296,6 +297,7 @@ static int cmd_test(int argc, char **argv)
     if      (strcmp(argv[1], "idle")    == 0) radio_cfg.test = TEST_IDLE;
     else if (strcmp(argv[1], "general") == 0) radio_cfg.test = TEST_GENERAL;
     else if (strcmp(argv[1], "power")   == 0) radio_cfg.test = TEST_POWER;
+    else if (strcmp(argv[1], "speed")   == 0) radio_cfg.test = TEST_SPEED;
     else if (strcmp(argv[1], "per")     == 0) radio_cfg.test = TEST_PER;
     else 
     {

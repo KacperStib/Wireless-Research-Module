@@ -1,10 +1,6 @@
 #include "ina219.h"
 #include "esp_task_wdt.h"
 
-// Globalne zmienne pomiarowe
-float current_mA = 0;
-float current_mA_peak = 0;
-
 // Podstawowe parametry konfiguracyjne ukladu
 uint8_t ina_range = 0b1;     // Zakres napiecia bus: 32 V
 uint8_t ina_gain = 0b11;     // Wzmocnienie PGA: 320 mV

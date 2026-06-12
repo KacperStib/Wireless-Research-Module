@@ -26,9 +26,7 @@
 #include "shell_mng.h"
 #include "dev_config.h"
 #include "nvs_storage.h"
-
-// Instancja wyswietlacza
-SSD1306_t dev;
+#include "radio.h"
 
 // ====== TASK PWR ======
 // Cykliczny odczyt danych o zuzyciu pradu
@@ -47,66 +45,8 @@ void vOledTask(void *pv)
 {
 	for (;;) 
 	{
-		char buf[32];
-		
-		// Zuzycie chwilowe pradu
-		memset(buf, ' ', sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-		sprintf(buf, "Prad: %.2f", current_mA);
-		ssd1306_display_text(&dev, 1, buf,sizeof(buf) - 1, false);
-		
-		// FIX GPS
-		memset(buf, ' ', sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-		sprintf(buf, "GPS FIX: %s (%d)", gps_fix ? "Y" : "N", gps_sats);
-		ssd1306_display_text(&dev, 2, buf, sizeof(buf) - 1, false);
-		// Wspolrzedne GPS
-		if (gps_fix)
-		{
-			memset(buf, ' ', sizeof(buf) - 1);
-        	buf[sizeof(buf) - 1] = '\0';
-			sprintf(buf, "%.2f N %.2f E", gps_lat, gps_lon);
-			ssd1306_display_text(&dev, 3, buf, sizeof(buf) - 1, false);
-		}
-		
-		// Technologia radiowa
-		memset(buf, ' ', sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-		sprintf(buf, "%s %s",
-				radio_cfg.tech == RADIO_TECH_LORA ? "LORA" : "ESPNOW",
-				radio_cfg.dir ? "TX" : "RX");
-		ssd1306_display_text(&dev, 4, buf, sizeof(buf) - 1, false);
-		
-		// Informacje o transmisji
-		memset(buf, ' ', sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-        // RSSI tylko w trybie RX
-        if (radio_cfg.dir == RADIO_DIR_RX) 
-        {
-            sprintf(buf, "RSSI: %d dBm", rssi);
-            ssd1306_display_text(&dev, 5, buf, sizeof(buf) - 1, false);
-        } 
-        // Pik pradowy w trybie TX
-        else 
-        {	
-			memset(buf, ' ', sizeof(buf) - 1);
-        	buf[sizeof(buf) - 1] = '\0';
-			sprintf(buf, "Peak: %.2f mA", current_mA_peak);
-            ssd1306_display_text(&dev, 5, buf, sizeof(buf) - 1, false); // czyść linię
-            
-            if (tx_time < 2000) 
-            {
-                // Dla bardzo krótkich czasów (np. ESP-NOW) wypisujemy w uS
-                sprintf(buf, "TX Time: %lu us", tx_time);
-            } 
-            else 
-            {
-                // Dla dłuższych czasów (np. LoRa) zamieniamy na milisekundy z przecinkiem
-                sprintf(buf, "TX Time: %.1f ms", (float)tx_time / 1000.0f);
-            }
-			ssd1306_display_text(&dev, 6, buf, sizeof(buf) - 1, false);
-        }
-        
+		ssd1306_update(current_mA, gps_fix, gps_sats, gps_lat, gps_lon, 
+					radio_cfg, current_mA_peak, rssi, tx_time);
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
@@ -122,7 +62,7 @@ void vLogTask(void *pv)
     for (;;) 
     {
 		// 1. Kolejka ogolnych logow
-		if (xQueueReceive(xLogQueue, &ev, portMAX_DELAY) == pdTRUE)
+		if (xQueueReceive(xLogQueue, &ev, pdMS_TO_TICKS(1000)) == pdTRUE)
         {
             if (!sd_card_ready)
                 sd_card_init();
@@ -131,8 +71,11 @@ void vLogTask(void *pv)
         }
 	    
 	    // 2. Kolejka logow profilowania pradowego
-	    if (xQueueReceive(xProfileQueue, &pp, 0) == pdTRUE) 
-        {
+	    if (xQueueReceive(xProfileQueue, &pp, pdMS_TO_TICKS(1000)) == pdTRUE) 
+        {	
+			if (!sd_card_ready)
+                sd_card_init();
+                
             sd_save_profile_to_csv(&pp);
         }
         
@@ -144,7 +87,6 @@ void vLogTask(void *pv)
 // Zarzadza przesylaniem lub odbieraniem danych w wybranej technologii
 void vRadioTask(void *pv) 
 {
-	uint8_t buf8[32];
 	for (;;) 
 	{	
 		// Technologia LoRa
@@ -153,63 +95,14 @@ void vRadioTask(void *pv)
 			// tryb TX
 			if (radio_cfg.dir)
 			{
-		        int send_len = sprintf((char *)buf8, "Hello World!!");
-			
-			    int64_t t_start = esp_timer_get_time();
-			    int64_t t_end_tx = 0; 
-			    
-			    // Start nadawania
-			    lora_send_packet(buf8, send_len); 
-			    
-			    if (radio_cfg.test == TEST_POWER)
-			    	// Wywolanie funkcji z sd_card, ktora sama podstawi strukture
-			    	sd_capture_and_log_profile("LORA", 50, &t_end_tx, t_start, &current_mA_peak); 
-			    else
-			    {
-					vTaskDelay(10 / portTICK_PERIOD_MS); 			// Opoznienie zeby zlapac pik (LoRa jest wolniejsza)
-			    	current_mA_peak = ina219_find_peak(&t_end_tx);
-			    }
-			    
-			    // Obliczanie czasu nadawania (tx_time)
-			    if (t_end_tx != 0) 
-			    {
-			        tx_time = (uint32_t)(t_end_tx - t_start);
-			    } 
-			    else 
-			    {
-			        tx_time = (uint32_t)(esp_timer_get_time() - t_start);
-			    }
-				
-				if (radio_cfg.test == TEST_GENERAL)
-			    	// Log tekstowy do pliku log.txt
-			    	sd_log_event("LORA",  true,  current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
-			
+		        lora_send_sequence();
 			    vTaskDelay(pdMS_TO_TICKS(6000));
 		  	}
 		  	
 		  	// Tryb RX
 		  	else 
 		  	{
-				lora_receive();
-				if (lora_received()) 
-				{
-					int rxLen = lora_receive_packet(buf8, sizeof(buf8));
-					// Zmierz RSSI
-					rssi = (int)lora_packet_rssi();
-					
-					if (radio_cfg.test == TEST_GENERAL)
-						// Wrzuc log do kolejki dla karty SD
-						sd_log_event("LORA",  false, 0,               rssi, gps_fix, gps_lat, gps_lon);
-					
-					if (radio_cfg.test == TEST_POWER)
-					{
-						vTaskDelay(200 / portTICK_PERIOD_MS);
-						sd_capture_and_log_profile("LORA", 100, NULL, NULL, NULL);
-					}
-					
-					ESP_LOGI(pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen, buf8);
-					
-				}
+				lora_receive_sequence();
 				// W przypadku LoRa trzeba robic recznie polling wiadomosci, nie ma mechanizmu callbacku
 				vTaskDelay(1); 
 			}
@@ -220,30 +113,7 @@ void vRadioTask(void *pv)
 			// Tryb TX
 			if (radio_cfg.dir)
 			{
-		        int len = sprintf((char *)buf8, "Hello ESP-NOW!");
-                int64_t t_end_tx = 0;
-                int64_t t_start = esp_timer_get_time();
-                
-                // Start nadawania ESP-NOW
-                espnow_send(buf8, len);
-                
-                if (radio_cfg.test == TEST_POWER)
-                	// Agresywne próbkowanie prądu dla ESP-NOW. 
-                	sd_capture_and_log_profile("ESPNOW", 5, &t_end_tx, t_start, &current_mA_peak);
-                else
-			    	current_mA_peak = ina219_find_peak(&t_end_tx);
-			    	
-                // Obliczanie czasu nadawania (tx_time)
-                if (t_end_tx != 0) {
-                    tx_time = (uint32_t)(t_end_tx - t_start);
-                } else {
-                    tx_time = (uint32_t)(esp_timer_get_time() - t_start);
-                }
-                
-                if (radio_cfg.test == TEST_GENERAL)
-                	// Zapis zdarzenia do ogólnego logu
-                	sd_log_event("ESPNOW", true, current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
-                
+		        espnow_send_sequence();
                 vTaskDelay(pdMS_TO_TICKS(6000));
 		  	}
 		  	// Tryb RX
@@ -279,7 +149,8 @@ void app_main(void)
 	radio_apply_config();
 
 	// Urchomienie i config ina219
-	ina219_power_on(0.05, 6.4);
+	ina219_power_on(0.1, 3.2);
+	//ina219_power_on(0.05, 6.4);
 	if (err != ESP_OK)
     	ESP_LOGE("INA219", "I2C CMD ERROR: 0x%x", err);	
 	vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -293,8 +164,6 @@ void app_main(void)
 	
 	// Inicjalizacja SD karty
 	sd_card_init();
-	//snprintf(LOG_FILE_NAME, sizeof(LOG_FILE_NAME), "%s/log.txt", MOUNT_POINT);
-	//s_example_write_file((const char*)LOG_FILE_NAME, "Measurements:");
 	
 	// Inicjalizacja handlera GPS - tworzy task GPS
 	/* NMEA parser configuration */

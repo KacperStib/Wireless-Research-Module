@@ -24,10 +24,6 @@
 
 #define TAG_PWR                 "PWR"
 
-// Globalne zmienne pomiarowe
-extern float current_mA;
-extern float current_mA_peak;
-
 // Rejestry konfiguracyjne czujnika
 extern uint8_t ina_range;
 extern uint8_t ina_gain;

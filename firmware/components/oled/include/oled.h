@@ -11,6 +11,7 @@
 #include <string.h>
 #include <esp_err.h>
 #include <driver/i2c.h>
+#include "dev_config.h"
 
 #define OLED_CONTROL_BYTE_CMD_STREAM    0x00
 #define OLED_CONTROL_BYTE_DATA_STREAM   0x40
@@ -63,6 +64,9 @@ typedef struct {
     i2c_port_t _i2c_num;
 } SSD1306_t;
 
+// Instancja wyswietlacza
+extern SSD1306_t dev;
+
 // Inicjalizacja struktury
 void ssd1306_init(SSD1306_t * dev, int width, int height);
 
@@ -77,5 +81,9 @@ void ssd1306_display_image(SSD1306_t * dev, int page, int seg, const uint8_t * i
 
 // Renderowanie tekstu o podanej dlugosci na wybranej stronie
 void ssd1306_display_text(SSD1306_t * dev, int page, const char * text, int text_len, bool invert);
+
+// Aktualizacja danych na ekranie
+void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, float gps_lon, 
+					radio_config_t radio, float current_mA_peak, int rssi, uint32_t tx_time);
 
 #endif // OLED_H

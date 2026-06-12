@@ -31,7 +31,8 @@ typedef enum {
 	TEST_IDLE = 0,
 	TEST_GENERAL = 1,
 	TEST_POWER = 2,
-	TEST_PER = 3
+	TEST_SPEED = 3,
+	TEST_PER = 4
 } test_scenario_t;
 
 // Parametry fizyczne modulu LoRa
