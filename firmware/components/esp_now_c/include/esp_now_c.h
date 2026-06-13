@@ -22,6 +22,9 @@
 // Callback wywolywany gdy przyjdzie pakiet ESP-NOW
 typedef void (*espnow_rx_cb_t)(const uint8_t *data, int len);
 
+// Flaga wyslania
+extern volatile bool espnow_sent;
+
 // Funkcje dostepowe modulu ESP-NOW
 esp_err_t espnow_init(espnow_rx_cb_t rx_callback);
 esp_err_t espnow_set_peer(const uint8_t mac[6]);

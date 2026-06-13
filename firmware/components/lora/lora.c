@@ -10,6 +10,27 @@ static long _frequency;                // Czestotliwosc pracy w Hz
 static int _send_packet_lost = 0;      // Licznik nieudanych transmisji
 static int _sbw = 0;                   // Indeks szerokosci pasma 
 
+volatile bool lora_sent = false;
+
+static void IRAM_ATTR dio0_isr_handler(void* arg) {
+	if(radio_cfg.dir == RADIO_DIR_TX)
+    	lora_sent = true;
+}
+
+static void setup_lora_interrupt() {
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << LORA_IO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .intr_type = GPIO_INTR_POSEDGE // Reagujemy na stan wysoki
+    };
+    gpio_config(&io_conf);
+    
+    // Włącz obsługę ISR w systemie
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(LORA_IO, dio0_isr_handler, NULL);
+}
+
 // Zapisz pojedynczy bajt do rejestru SX127x
 void 
 lora_write_reg(int reg, int val)
@@ -294,6 +315,8 @@ lora_init(void)
    lora_write_reg(REG_MODEM_CONFIG_3, 0x04);  // Wlacz AGC
    lora_set_tx_power(17);                      
    lora_idle();                               
+   
+   setup_lora_interrupt();
    
    return 1;
 }

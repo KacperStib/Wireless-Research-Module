@@ -10,6 +10,10 @@
 #include "driver/gpio.h"
 
 #include "../../main/bsp.h"
+#include "dev_config.h"
+
+// Flaga wysylki
+extern volatile bool lora_sent;
 
 /*
  * Register definitions

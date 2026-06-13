@@ -1,7 +1,10 @@
 #include <stdio.h>
+#include "esp_timer.h"
 #include "radio.h"
 
-uint8_t buf8[64];
+#include <inttypes.h>
+
+uint8_t buf8[250];
 
 // Globalne zmienne pomiarowe
 float current_mA = 0;
@@ -10,10 +13,15 @@ float current_mA_peak = 0;
 int rssi = 0;
 uint32_t tx_time = 0;
 
-static void send_message_speed_test()
-{
-	
-}
+// Test predkosci
+static uint16_t packets_received = 0;
+static uint32_t speed_test_start = 0;
+
+// Test PER
+static uint32_t last_seq = 0;
+static uint32_t total_received = 0;
+static uint32_t total_lost = 0;
+static uint8_t num;
 
 void lora_send_sequence()
 {
@@ -73,6 +81,13 @@ void lora_send_sequence()
 			break;
 			
 		case TEST_SPEED:
+			for (int i = 0; i < 50; i++)
+		    {	
+				lora_sent = false;
+		      	lora_send_packet(buf8, 250);
+		      	while(!lora_sent);
+		    }
+		    vTaskDelay(1);
 			break;
 			
 		case TEST_PER:
@@ -132,6 +147,22 @@ void lora_receive_sequence()
 			break;
 			
 		case TEST_SPEED:
+			if (packets_received == 0)
+				speed_test_start = esp_timer_get_time();
+			
+			lora_receive();
+			if (lora_received()) 
+			{
+				lora_receive_packet(buf8, sizeof(buf8));
+				packets_received++;
+			}
+			
+			if (esp_timer_get_time() - speed_test_start >= 1000000)
+			{
+				ESP_LOGI("TEST", "Speed Test:%u - %0.3fMbps", packets_received, (packets_received * 8.0f * 250.0f) / 1000000.0f);
+				packets_received = 0;
+        		speed_test_start = 0;
+        	}
 			break;
 			
 		case TEST_PER:
@@ -206,17 +237,24 @@ void espnow_send_sequence()
 			break;
 			
 		case TEST_SPEED:
-		  while (true)
-		  {
-		    for (int i = 0; i < 500; i++)
-		    {
-		      send_message_speed_test();
+			for (int i = 0; i < 500; i++)
+		    {	
+				espnow_sent = false;
+		      	espnow_send(buf8, 250);
+		      	while(!espnow_sent);
 		    }
 		    vTaskDelay(1);
-		  }
+
 			break;
 			
 		case TEST_PER:
+			// Wysłanie 100 paczek w jednej sekwencji
+		    for (int i = 0; i < 100; i++) {		        
+		        // Wypełnienie ramki
+		        uint8_t seq = (uint8_t)i;
+		        espnow_send(&seq, 1);        		 
+		        vTaskDelay(20 / portTICK_PERIOD_MS); 
+		    }
 			break;
 			
 		default:
@@ -224,7 +262,7 @@ void espnow_send_sequence()
 	}            
 }
 
-void espnow_receive_sequence(const esp_now_recv_info_t *info, int len)
+void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {	
 	rssi = info->rx_ctrl->rssi;
 	
@@ -243,9 +281,51 @@ void espnow_receive_sequence(const esp_now_recv_info_t *info, int len)
 			break;
 			
 		case TEST_SPEED:
+			if (packets_received == 0)
+				speed_test_start = esp_timer_get_time();
+				
+			packets_received++;
+			
+			if (esp_timer_get_time() - speed_test_start >= 1000000)
+			{
+				ESP_LOGI("TEST", "Speed Test:%u - %0.3fMbps", packets_received, (packets_received * 8.0f * 250.0f) / 1000000.0f);
+				packets_received = 0;
+        		speed_test_start = 0;
+        	}
 			break;
 			
 		case TEST_PER:
+        
+	       	num = *data;
+
+		    // Start nowej serii
+		    if (num == 0) {
+		        total_received = 0;
+		        total_lost = 0;
+		        speed_test_start = esp_timer_get_time(); // Zapisujemy czas startu serii
+		    }
+		
+		    // Liczenie strat
+		    if (num > (last_seq + 1) && last_seq != 0) {
+		        total_lost += (num - last_seq - 1);
+		    }
+		    
+		    last_seq = num;
+		    total_received++;
+		
+		    // Sprawdzenie: Czy minęło za dużo czasu (np. 5s) LUB czy mamy już ostatni pakiet?
+		    int64_t time_elapsed = (esp_timer_get_time() - speed_test_start) / 1000;
+		    
+		    if (num == 99 || (time_elapsed > 5000 && total_received > 0)) {
+		        float per = (float)total_lost / (float)(total_received + total_lost) * 100.0f;
+		        
+		        ESP_LOGI("PER", "--- PODSUMOWANIE ---");
+		        ESP_LOGI("PER", "Odebrano: %" PRIu32 " | Stracono: %" PRIu32 " | PER: %.2f%%", 
+		                 total_received, total_lost, (double)per);
+		        
+		        // Reset po serii
+		        last_seq = 0; // Ustawiamy 0, żeby kolejna seria była rozpoznana jako start
+		    }
 			break;
 			
 		default:

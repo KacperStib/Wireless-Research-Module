@@ -31,6 +31,11 @@ void radio_apply_config(void)
         lora_set_spreading_factor(radio_cfg.lora.sf);
         lora_set_tx_power(radio_cfg.lora.pwr);
         
+        if (radio_cfg.dir == RADIO_DIR_RX)
+        	lora_set_dio_mapping(0, 0);
+        else if (radio_cfg.dir == RADIO_DIR_TX)
+        	lora_set_dio_mapping(0, 1);
+        	
         ESP_LOGI(TAG, "LORA SF%d BW%d CR%d PWR%d dir=%s",
                  radio_cfg.lora.sf, radio_cfg.lora.bw,
                  radio_cfg.lora.cr, radio_cfg.lora.pwr,

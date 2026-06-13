@@ -13,17 +13,20 @@
 static espnow_rx_cb_t s_rx_cb = NULL;
 static bool s_wifi_initialized;
 
+bool volatile espnow_sent = false;
+
 // Callbacki ESP-NOW
 // Przy wysylce
 static void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status)
 {
     ESP_LOGD(TAG, "TX %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "FAIL");
+    espnow_sent = true;
 }
 
 // Przy odbiorze
 static void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {	
-    espnow_receive_sequence(info, len);
+    espnow_receive_sequence(info, data, len);
     
     if (s_rx_cb)
     {
@@ -114,5 +117,5 @@ void espnow_deinit(void)
 
 void espnow_rx_handler(const uint8_t *data, int len) 
 {
-    ESP_LOGI("RADIO", "ESPNOW RX %d B: %.*s", len, len, data);
+    ESP_LOGD("RADIO", "ESPNOW RX %d B: %.*s", len, len, data);
 }

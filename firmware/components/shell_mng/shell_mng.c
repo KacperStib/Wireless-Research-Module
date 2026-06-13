@@ -88,11 +88,13 @@ static int cmd_dir(int argc, char **argv)
     if (strcmp(argv[1], "tx") == 0) 
     {
         radio_cfg.dir = RADIO_DIR_TX;
+        radio_apply_config();
         printf("Kierunek: TX\n");
     } 
     else if (strcmp(argv[1], "rx") == 0) 
     {
         radio_cfg.dir = RADIO_DIR_RX;
+        radio_apply_config();
         printf("Kierunek: RX\n");
     } 
     else 

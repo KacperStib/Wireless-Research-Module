@@ -13,7 +13,7 @@
 
 #define TAG_INIT "RADIO"
 
-extern uint8_t buf8[64];
+extern uint8_t buf8[250];
 
 // Globalne zmienne pomiarowe
 extern float current_mA;
@@ -28,6 +28,6 @@ extern uint32_t tx_time;
 void lora_send_sequence();
 void lora_receive_sequence();
 void espnow_send_sequence();
-void espnow_receive_sequence(const esp_now_recv_info_t *info, int len);
+void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *data, int len);
 
 #endif // RADIO_H
