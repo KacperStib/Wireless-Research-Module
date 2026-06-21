@@ -13,7 +13,16 @@
 
 #define TAG_INIT "RADIO"
 
+#define ASK_TAG 0xAA
+#define ANS_TAG 0xBB
+
 extern uint8_t buf8[250];
+extern uint8_t len;
+
+extern uint8_t lora_len;
+extern uint8_t espnow_len;
+
+extern bool rtt_back;
 
 // Globalne zmienne pomiarowe
 extern float current_mA;

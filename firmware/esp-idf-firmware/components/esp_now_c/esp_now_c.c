@@ -26,7 +26,11 @@ static void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status)
 // Przy odbiorze
 static void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {	
-    espnow_receive_sequence(info, data, len);
+	if(radio_cfg.tech == RADIO_TECH_ESPNOW && radio_cfg.dir == RADIO_DIR_RX)
+    	espnow_receive_sequence(info, data, len);
+    
+    if(radio_cfg.tech == RADIO_TECH_ESPNOW && radio_cfg.dir == RADIO_DIR_TX)
+    	rtt_back = true;
     
     if (s_rx_cb)
     {
@@ -53,11 +57,17 @@ esp_err_t espnow_init(espnow_rx_cb_t rx_callback)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA/*,  WIFI_PROTOCOL_LR*/));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(80));
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(radio_cfg.espnow.pwr));
     ESP_ERROR_CHECK(esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE));
+    
+    if (radio_cfg.espnow.lr_mode)
+    {
+		ESP_LOGI(TAG, "LR MODE!");
+   		ESP_ERROR_CHECK(esp_wifi_set_protocol(ESP_IF_WIFI_STA, WIFI_PROTOCOL_LR));
+   	}
 
     // Inicjalizacja ESP-NOW i rejestracja funkcji zwrotnych
     ESP_ERROR_CHECK(esp_now_init());

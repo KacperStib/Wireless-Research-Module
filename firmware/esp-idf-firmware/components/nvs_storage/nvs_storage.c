@@ -66,5 +66,12 @@ esp_err_t nvs_cfg_load(radio_config_t *cfg)
     }
 
     nvs_close(h);
+    
+    printf("=== Konfiguracja ===\n");
+    printf("  tech:     %s\n", radio_cfg.tech == RADIO_TECH_LORA ? "lora" : "espnow");
+    printf("  dir:      %s\n", radio_cfg.dir == RADIO_DIR_TX ? "tx" : "rx");
+    printf("  peer_mac: " MACSTR "\n", MAC2STR(radio_cfg.peer_mac));
+    printf("  test:     %d\n", radio_cfg.test);
+    
     return err;
 }

@@ -11,10 +11,13 @@ static int _send_packet_lost = 0;      // Licznik nieudanych transmisji
 static int _sbw = 0;                   // Indeks szerokosci pasma 
 
 volatile bool lora_sent = false;
+volatile bool rx_done = false;
 
 static void IRAM_ATTR dio0_isr_handler(void* arg) {
 	if(radio_cfg.dir == RADIO_DIR_TX)
     	lora_sent = true;
+    else if(radio_cfg.dir == RADIO_DIR_RX)
+    	rx_done = true;
 }
 
 static void setup_lora_interrupt() {
@@ -313,7 +316,7 @@ lora_init(void)
    lora_write_reg(REG_FIFO_TX_BASE_ADDR, 0);  
    lora_write_reg(REG_LNA, lora_read_reg(REG_LNA) | 0x03); // Maksymalne wzmocnienie LNA
    lora_write_reg(REG_MODEM_CONFIG_3, 0x04);  // Wlacz AGC
-   lora_set_tx_power(17);                      
+   //lora_set_tx_power(17);                      
    lora_idle();                               
    
    setup_lora_interrupt();
@@ -322,7 +325,7 @@ lora_init(void)
 }
 
 // Wyslij pakiet danych 
-void 
+int
 lora_send_packet(uint8_t *buf, int size)
 {
    lora_idle();
@@ -351,14 +354,18 @@ lora_send_packet(uint8_t *buf, int size)
    if (loop == max_retry) {
       _send_packet_lost++;
       ESP_LOGE(TAG, "lora_send_packet Fail (Timeout)");
+      return -1;
    }
    lora_write_reg(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK); // Skasuj flage przerwania
+   return 0;
 }
 
 // Pobierz odebrany pakiet z FIFO (nieblokujace)
 int 
 lora_receive_packet(uint8_t *buf, int size)
-{
+{	
+   spi_device_acquire_bus(_spi, portMAX_DELAY);
+   
    int len = 0;
    int irq = lora_read_reg(REG_IRQ_FLAGS);
    lora_write_reg(REG_IRQ_FLAGS, irq); // Kasuj flagi przerwan
@@ -374,7 +381,8 @@ lora_receive_packet(uint8_t *buf, int size)
    
    if(len > size) len = size; 
    lora_read_reg_buffer(REG_FIFO, buf, len); 
-
+	
+   spi_device_release_bus(_spi);
    return len;
 }
 

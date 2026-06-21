@@ -32,7 +32,8 @@ typedef enum {
 	TEST_GENERAL = 1,
 	TEST_POWER = 2,
 	TEST_SPEED = 3,
-	TEST_PER = 4
+	TEST_PER = 4,
+	TEST_RTT = 5
 } test_scenario_t;
 
 // Parametry fizyczne modulu LoRa
@@ -43,12 +44,19 @@ typedef struct {
     uint8_t pwr; // Moc nadawania w dBm
 } lora_config_t;
 
+// Parametry ESPNOW
+typedef struct {
+	uint8_t pwr;
+	bool lr_mode;
+} espnow_config_t;
+
 // Glowna konfiguracja urzadzenia zapisywana w NVS
 typedef struct {
     radio_tech_t tech;        // Wybrana technologia 
     radio_dir_t  dir;         // Tryb pracy 
     uint8_t      peer_mac[6]; // Adres MAC dla ESP-NOW
     lora_config_t lora;       // Ustawienia szczegolowe LoRa
+    espnow_config_t espnow;   // Ustawienia ESPNOW
     test_scenario_t test;
 } radio_config_t;
 

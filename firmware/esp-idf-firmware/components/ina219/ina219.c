@@ -101,7 +101,7 @@ float ina219_find_peak(int64_t *rx_end)
         if (sample > peak) peak = sample; 
 
         // Bezpiecznik: jesli prąd spadl poniżej progu
-        if (*rx_end == 0 && sample < 0.12f) break;
+        if (*rx_end == 0 && sample < 0.1f) break;
         
         vTaskDelay(1);
     }
@@ -122,6 +122,10 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
     const float scale = currentLSB * 1000.0f;
     const int64_t start_time = esp_timer_get_time();
     const int64_t end_time   = start_time + ((int64_t)duration_ms * 1000);
+	
+	float threshold = 100.0f;
+	if(duration_ms < 30)
+		threshold = 120.0f;
 	
 	// Petla odczytu probek
     while (idx < PROFILE_SAMPLES)
@@ -147,7 +151,7 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
         if (sample_mA > peak_mA) peak_mA = sample_mA;
 		
 		// Timestamp jesli to pik
-        if (tx_end_time != NULL && *tx_end_time == 0 && sample_mA < 120.0f && idx > 10)
+        if (tx_end_time != NULL && *tx_end_time == 0 && sample_mA < threshold && idx > 10)
             *tx_end_time = now;
 
         prof->samples[idx].rel_time_us = (uint32_t)(now - start_time);

@@ -93,7 +93,7 @@ void vRadioTask(void *pv)
 		if (radio_cfg.tech == RADIO_TECH_LORA)
 		{	
 			// tryb TX
-			if (radio_cfg.dir)
+			if (radio_cfg.dir == RADIO_DIR_TX)
 			{
 		        lora_send_sequence();
 			    vTaskDelay(pdMS_TO_TICKS(6000));
@@ -111,7 +111,7 @@ void vRadioTask(void *pv)
 		else 
 		{ 
 			// Tryb TX
-			if (radio_cfg.dir)
+			if (radio_cfg.dir == RADIO_DIR_TX)
 			{
 		        espnow_send_sequence();
                 vTaskDelay(pdMS_TO_TICKS(6000));

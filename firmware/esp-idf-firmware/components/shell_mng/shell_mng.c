@@ -161,6 +161,7 @@ const char* test_to_str(test_scenario_t test) {
 	    case TEST_POWER:   return "power";
 	    case TEST_SPEED:   return "speed";
 	    case TEST_PER:     return "per";
+	    case TEST_RTT:     return "rtt";
 	    default:           return "unknown";
 	}
 }
@@ -285,6 +286,46 @@ static int cmd_lora(int argc, char **argv)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Handler komendy: espnow [mode|pwr] [wartosc]
+// ─────────────────────────────────────────────────────────────────────────────
+static int cmd_espnow(int argc, char **argv)
+{
+    if (argc < 3) 
+    {
+        printf("=== Konfiguracja ESP-NOW ===\n");
+        printf("  mode: %s  (0: Normal, 1: Long Range)\n", radio_cfg.espnow.lr_mode ? "Long Range" :"Normal");
+        printf("  pwr:  %d  (0-80)\n", radio_cfg.espnow.pwr);
+        printf("Uzycie: espnow <mode|pwr> <wartosc>\n");
+        return 0;
+    }
+
+    int val = atoi(argv[2]);
+
+    if (strcmp(argv[1], "mode") == 0) 
+    {
+        // Zakładam, że lr_mode to bool, więc akceptujemy 0 lub 1
+        if (val < 0 || val > 1) { printf("Tryb: 0 (Long Range), 1 (Normal)\n"); return 1; }
+        radio_cfg.espnow.lr_mode = (bool)val;
+    }
+    else if (strcmp(argv[1], "pwr") == 0) 
+    {
+        // Walidacja dla pwr 0-80
+        if (val < 0 || val > 80) { printf("Moc (pwr): 0-80\n"); return 1; }
+        radio_cfg.espnow.pwr = (uint8_t)val;
+    }
+    else 
+    {
+        printf("Nieznany parametr: '%s'\n", argv[1]);
+        return 1;
+    }
+
+    // Aplikacja zmian
+    radio_apply_config();
+    printf("OK\n");
+    return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Handler komendy: test[idle|general|power|per] 
 // ─────────────────────────────────────────────────────────────────────────────
 static int cmd_test(int argc, char **argv)
@@ -301,6 +342,7 @@ static int cmd_test(int argc, char **argv)
     else if (strcmp(argv[1], "power")   == 0) radio_cfg.test = TEST_POWER;
     else if (strcmp(argv[1], "speed")   == 0) radio_cfg.test = TEST_SPEED;
     else if (strcmp(argv[1], "per")     == 0) radio_cfg.test = TEST_PER;
+    else if (strcmp(argv[1], "rtt")     == 0) radio_cfg.test = TEST_RTT;
     else 
     {
         printf("Nieznany test: '%s'\n", argv[1]);
@@ -415,6 +457,13 @@ void console_radio_register(void)
 	    .func    = cmd_lora,
 	}));
 	
+	ESP_ERROR_CHECK(esp_console_cmd_register(&(esp_console_cmd_t){
+	    .command = "espnow",
+	    .help    = "Parametry ESP-NOW: espnow <mode|pwr> <wartosc>",
+	    .hint    = "<mode|pwr> <wartosc>",
+	    .func    = cmd_espnow,
+	}));
+
 	ESP_ERROR_CHECK(esp_console_cmd_register(&(esp_console_cmd_t){
 	    .command = "tasks",
 	    .help    = "Lista taskow FreeRTOS z watermarkiem stosu",

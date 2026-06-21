@@ -13,6 +13,10 @@ volatile radio_config_t radio_cfg = {
         .cr  = 1,
         .pwr = 17,
     },
+    .espnow = {
+		.lr_mode = false,
+		.pwr = 80,
+	},
 };
 
 void radio_apply_config(void)
