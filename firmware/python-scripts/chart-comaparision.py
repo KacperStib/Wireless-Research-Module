@@ -2,6 +2,8 @@ import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 
+#MY_LABELS = ["Pomiar INA219", "IDLE"]
+#MY_LABELS = ["DUT1", "DUT2"]
 MY_LABELS = ["160 MHz", "120 MHz", "80 MHz"]
 
 def process_file(file_path):
@@ -9,14 +11,17 @@ def process_file(file_path):
     df.columns = df.columns.str.strip()
     df['Current(mA)'] = df['Current(uA)'] / 1000.0
     
+    ### dodatek
+    df['Time_norm'] = df['Timestamp(ms)'] - df['Timestamp(ms)'].iloc[0]
+
     total_len = len(df)
     # LORA
     tx_idx = (int(0.20 * total_len), int(0.25 * total_len))
-    rx_idx = (int(0.70 * total_len), int(0.75 * total_len))
+    rx_idx = (int(0.85 * total_len), int(0.9 * total_len))
     
     # ESPNOW
-    tx_idx = (int(0.05 * total_len), int(0.45 * total_len))
-    rx_idx = (int(0.6 * total_len), int(0.95 * total_len))
+    tx_idx = (int(0.1 * total_len), int(0.4 * total_len))
+    rx_idx = (int(0.7 * total_len), int(0.95 * total_len))
 
     tx_data = df.iloc[tx_idx[0]:tx_idx[1]].copy()
     rx_data = df.iloc[rx_idx[0]:rx_idx[1]].copy()
@@ -36,7 +41,8 @@ def process_file(file_path):
 def plot_single(data_list, title, y_label, stat_key_mean, stat_key_max, is_full=False):
     plt.figure(figsize=(10, 5))
     for df, stats, label in data_list:
-        x_col = 'Timestamp(ms)' if is_full else 'Time_norm'
+        #x_col = 'Timestamp(ms)' if is_full else 'Time_norm'
+        x_col = 'Time_norm'
         if is_full:
             label_text = label
         else:

@@ -1,33 +1,77 @@
 import sys
 import os
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+
+def find_precise_start(df, time_col, current_col, threshold, upsample=10):
+    """
+    Znajduje precyzyjny moment przekroczenia progu (start piku) poprzez
+    interpolację liniową pomiędzy ostatnią próbką PONIŻEJ progu a
+    pierwszą próbką POWYŻEJ progu. Odcinek między tymi dwiema próbkami
+    zostaje zagęszczony `upsample`-krotnie, a jako precyzyjny start
+    piku przyjmowany jest pierwszy punkt zagęszczonej siatki, który
+    faktycznie przekracza próg.
+
+    Jeśli przekroczenie następuje już na pierwszej próbce w zbiorze
+    (brak wcześniejszej próbki do interpolacji), zwracany jest
+    czas tej pierwszej próbki bez interpolacji.
+    """
+    above = df.index[df[current_col] > threshold]
+    if len(above) == 0:
+        return None
+
+    idx = above[0]
+
+    # Brak poprzedniej próbki - nie da się zinterpolować, zwróć wprost
+    if idx == df.index[0]:
+        return df.loc[idx, time_col]
+
+    prev_idx = df.index[df.index.get_loc(idx) - 1]
+
+    t0, t1 = df.loc[prev_idx, time_col], df.loc[idx, time_col]
+    c0, c1 = df.loc[prev_idx, current_col], df.loc[idx, current_col]
+
+    # Zagęszczenie odcinka miedzy proba "przed" i "po" progu
+    t_fine = np.linspace(t0, t1, upsample + 1)
+    c_fine = np.interp(t_fine, [t0, t1], [c0, c1])
+
+    # Pierwszy punkt siatki, ktory faktycznie przekracza prog
+    cross_mask = c_fine >= threshold
+    cross_idx = np.argmax(cross_mask)  # pierwsze True (lub 0 gdy brak)
+
+    precise_start = t_fine[cross_idx]
+    return precise_start
+
 
 def load_and_process(file_path, is_esp32=False, external_threshold=None):
     df = pd.read_csv(file_path)
     df.columns = df.columns.str.strip()
-    
-    # UWAGA: Dla ESP32 nie usuwamy duplikatów timestampów ms, 
+
+    # UWAGA: Dla ESP32 nie usuwamy duplikatów timestampów ms,
     # bo przy ~8kHz kilka próbek ma tę samą milisekundę!
     if not is_esp32:
         df = df.drop_duplicates(subset=['Timestamp(ms)'])
 
+    df = df.reset_index(drop=True)
+
     time_col, current_col = 'Timestamp(ms)', 'Current(uA)'
-    
-    # --- NOWOŚĆ: Obliczanie liczby próbek i częstotliwości kHz ---
+
+    # --- Obliczanie liczby próbek i częstotliwości kHz ---
     total_samples = len(df)
     time_span_ms = df[time_col].iloc[-1] - df[time_col].iloc[0]
-    
+
     if time_span_ms > 0:
         khz = (total_samples / time_span_ms)  # próbki / ms to bezpośrednio kHz
     else:
         khz = 0.0
-    
+
     # Drukowanie statystyk w konsoli
     label = "ESP32" if is_esp32 else "PPK2"
     print(f"[{label}] Plik: {os.path.basename(file_path)}")
     print(f"  -> Liczba próbek w pliku: {total_samples}")
-    print(f"  -> Częstotliwość próbkowania: {khz:.2f} kHz (Średnio co {1000/khz if khz > 0 else 0:.1f} µs)")
+    print(f"  -> Częstotliwość próbkowania: {khz:.2f} kHz (Średnio co {1000 / khz if khz > 0 else 0:.1f} µs)")
     print("-" * 50)
     # -------------------------------------------------------------
 
@@ -37,14 +81,23 @@ def load_and_process(file_path, is_esp32=False, external_threshold=None):
     fwhm_calc = baseline + (maximum - baseline) / 2
     threshold = external_threshold if (not is_esp32 and external_threshold is not None) else fwhm_calc
 
-    # Detekcja piku
+    # Detekcja piku (surowa, do wyznaczenia end_time i statystyk)
     pulse = df[df[current_col] > threshold]
     if not pulse.empty:
-        start_time = pulse[time_col].iloc[0]
+        # --- Precyzyjny start piku metodą interpolacji ---
+        precise_start = find_precise_start(df, time_col, current_col, threshold, upsample=10)
+        raw_start = pulse[time_col].iloc[0]
+        start_time = precise_start if precise_start is not None else raw_start
+
         end_time = pulse[time_col].iloc[-1]
-        
-        # Obliczenia statystyk tylko dla piku
-        df_zoom = df[(df[time_col] >= start_time) & (df[time_col] <= end_time)]
+
+        print(f"  -> Start piku (surowy, 1. próbka nad progiem): {raw_start:.3f} ms")
+        print(f"  -> Start piku (interpolowany, 10x): {start_time:.3f} ms")
+        print(f"  -> Różnica (korekta): {(raw_start - start_time):.3f} ms")
+        print("-" * 50)
+
+        # Obliczenia statystyk tylko dla piku (na bazie surowego zakresu progu)
+        df_zoom = df[(df[time_col] >= raw_start) & (df[time_col] <= end_time)]
         stats = {
             'duration_ms': end_time - start_time,
             'mean_mA': df_zoom[current_col].mean() / 1000.0,
@@ -52,8 +105,10 @@ def load_and_process(file_path, is_esp32=False, external_threshold=None):
             'total_samples': total_samples,  # dorzucamy do statystyk wykresu
             'khz': khz                        # dorzucamy do statystyk wykresu
         }
-        
-        # PRZESKALOWANIE: normalizujemy czas całego pliku względem startu piku
+
+        # PRZESKALOWANIE: normalizujemy czas całego pliku względem
+        # interpolowanego (precyzyjnego) startu piku - tak, aby obie
+        # serie (PPK2 i ESP32) zaczynały się od tego samego t=0.
         df = df.copy()
         df['time_norm'] = df[time_col] - start_time
     else:
@@ -62,12 +117,13 @@ def load_and_process(file_path, is_esp32=False, external_threshold=None):
 
     return df, stats, threshold
 
+
 def plot_comparison(datasets):
     fig, ax = plt.subplots(figsize=(11, 5))
     colors = ['#1f77b4', '#d62728']
 
     for (df, stats, label), color in zip(datasets, colors):
-        # Rysujemy cały przebieg z przesuniętą osią czasu
+        # Rysujemy cały przebieg z przesuniętą (wyrównaną) osią czasu
         ax.plot(df['time_norm'], df['Current(uA)'] / 1000.0,
                 linewidth=1.5, color=color, label=label, alpha=0.8)
 
@@ -81,17 +137,21 @@ def plot_comparison(datasets):
             f"Częst: {stats['khz']:.2f} kHz"
         )
         y_pos = 0.75 if 'PPK2' in label else 0.55
-        ax.text(0.98, y_pos, stats_text, transform=ax.transAxes, verticalalignment='top', 
+        ax.text(0.98, y_pos, stats_text, transform=ax.transAxes, verticalalignment='top',
                 horizontalalignment='right', fontsize=12, fontfamily='monospace', color=color,
                 bbox=dict(boxstyle='round,pad=0.4', facecolor='white', alpha=0.85, edgecolor=color))
 
-    ax.set_title('Profile prądowe podczas nadawania (TX))', fontsize=20, weight='bold')
+    # Pionowa linia w t=0 - wspólny, interpolowany punkt startu piku
+    ax.axvline(0, color='gray', linestyle='--', linewidth=1, alpha=0.6)
+
+    ax.set_title('Profile prądowe podczas nadawania (TX)', fontsize=20, weight='bold')
     ax.set_xlabel('Czas od początku piku (ms)', fontsize=20)
     ax.set_ylabel('Prąd (mA)', fontsize=20)
     ax.grid(True, linestyle=':', alpha=0.4)
     ax.legend(loc='upper right', fontsize=25)
     plt.tight_layout()
     return fig
+
 
 def main():
     if len(sys.argv) < 3:
@@ -101,10 +161,11 @@ def main():
     print("-" * 50)
     df_ppk2, stats_ppk2, threshold = load_and_process(sys.argv[1], is_esp32=False)
     df_esp32, stats_esp32, _ = load_and_process(sys.argv[2], is_esp32=True, external_threshold=threshold)
-    
+
     datasets = [(df_ppk2, stats_ppk2, 'PPK2'), (df_esp32, stats_esp32, 'ESP32')]
     plot_comparison(datasets)
     plt.show()
+
 
 if __name__ == "__main__":
     main()

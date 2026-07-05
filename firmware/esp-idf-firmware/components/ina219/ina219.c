@@ -89,7 +89,7 @@ float ina219_read_power(void)
 
 // Przeszukanie profilu pradowego w poszukiwaniu najwyzszego piku
 // Predkosc magistrali I2C podniesiona ze 100 kHz do 400 kHz w celu zvwiekszenia czestotliwosci probkowania
-float ina219_find_peak(int64_t *rx_end)
+float ina219_find_peak(int64_t *rx_end, uint8_t threshold)
 {
     float peak = 0, sample = 0;
     TickType_t t_start = xTaskGetTickCount();
@@ -101,7 +101,7 @@ float ina219_find_peak(int64_t *rx_end)
         if (sample > peak) peak = sample; 
 
         // Bezpiecznik: jesli prąd spadl poniżej progu
-        if (*rx_end == 0 && sample < 0.1f) break;
+        if (*rx_end == 0 && sample < (float)threshold) break;
         
         vTaskDelay(1);
     }
@@ -123,10 +123,10 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
     const int64_t start_time = esp_timer_get_time();
     const int64_t end_time   = start_time + ((int64_t)duration_ms * 1000);
 	
-	float threshold = 100.0f;
+	float threshold = 50.0f;
 	if(duration_ms < 30)
 		threshold = 120.0f;
-	
+	esp_task_wdt_add(NULL);  
 	// Petla odczytu probek
     while (idx < PROFILE_SAMPLES)
     {	
@@ -141,7 +141,7 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
         // Break całej funkcji przy bledzie 
         if (ret != ESP_OK) {
             ESP_LOGE("RADIO", "Błąd I2C (0x%x), przerywam zbieranie profilu.", ret);
-            break; // Calkowite wyjscie z petli i funkcji
+            //break; // Calkowite wyjscie z petli i funkcji
         }
         
         int16_t raw       = (int16_t)((buf[0] << 8) | buf[1]);
@@ -160,11 +160,15 @@ float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_
         
         // zero delay — I2C samo w sobie zajmuje ~90µs (nawet po 1 MHz)
         if (idx % 75 == 0) {
-            vTaskDelay(1); 
-            esp_err_t ret = i2c_write_read_fast(INA219_ADDR, INA219_REG_CURRENT, buf, 2);
+            //vTaskDelay(1);       
+            //esp_err_t ret = i2c_write_read_fast(INA219_ADDR, INA219_REG_CURRENT, buf, 2);
+            
+            //taskYIELD();
+            
+            esp_task_wdt_reset();
         }
     }
-	
+	esp_task_wdt_delete(NULL); 
     prof->total_samples = idx;
     return peak_mA;
 }

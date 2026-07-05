@@ -43,7 +43,7 @@ float ina219_read_current(void);
 float ina219_read_power(void);
 
 // Szukanie najwyzszego piku pradowego
-float ina219_find_peak(int64_t *rx_end);
+float ina219_find_peak(int64_t *rx_end, uint8_t threshold);
 // Uchwycenie profilu pradowego a'la power profiler kit (nordic)
 float ina219_capture_profile(power_profile_t *prof, uint32_t duration_ms, int64_t *tx_end_time);
 

@@ -46,7 +46,7 @@ typedef struct {
 extern QueueHandle_t xLogQueue;
 
 // Struktura do profilowania zuzycia pradu
-#define PROFILE_SAMPLES 900
+#define PROFILE_SAMPLES 1000
 
 typedef struct {
     uint32_t rel_time_us; // Czas względny od początku nadawania

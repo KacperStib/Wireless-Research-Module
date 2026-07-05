@@ -27,6 +27,7 @@
 #include "dev_config.h"
 #include "nvs_storage.h"
 #include "radio.h"
+#include "esp_task_wdt.h"
 
 // ====== TASK PWR ======
 // Cykliczny odczyt danych o zuzyciu pradu
@@ -86,7 +87,7 @@ void vLogTask(void *pv)
 // ====== TASK RADIO ======
 // Zarzadza przesylaniem lub odbieraniem danych w wybranej technologii
 void vRadioTask(void *pv) 
-{
+{		
 	for (;;) 
 	{	
 		// Technologia LoRa
@@ -149,7 +150,7 @@ void app_main(void)
 	radio_apply_config();
 
 	// Urchomienie i config ina219
-	ina219_power_on(0.1, 3.2);
+	ina219_power_on(0.2, 1.6);
 	//ina219_power_on(0.05, 6.4);
 	if (err != ESP_OK)
     	ESP_LOGE("INA219", "I2C CMD ERROR: 0x%x", err);	

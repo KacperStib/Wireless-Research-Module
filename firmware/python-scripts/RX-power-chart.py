@@ -2,7 +2,7 @@ import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def load_data(file_path, limit_ms=100):
+def load_data(file_path, limit_ms=20):
     df = pd.read_csv(file_path)
     df.columns = df.columns.str.strip()
     
@@ -40,7 +40,7 @@ def plot_noise_comparison(datasets):
     ax.set_title('Profile prądowe podczas nasłuchu (RX)', fontsize=20, weight='bold')
     ax.set_xlabel('Czas (ms)', fontsize=20)
     ax.set_ylabel('Prąd (mA)', fontsize=20)
-    ax.set_xlim(0, 100) # Wymuszamy oś X do 100ms
+    ax.set_xlim(0, 20) # Wymuszamy oś X do 100ms
     ax.grid(True, linestyle=':', alpha=0.6)
     ax.legend(loc='upper right', fontsize=25)
     plt.tight_layout()
@@ -52,8 +52,8 @@ def main():
         return
 
     # Ładujemy i ucinamy oba do 100ms
-    data1 = load_data(sys.argv[1], limit_ms=100)
-    data2 = load_data(sys.argv[2], limit_ms=100)
+    data1 = load_data(sys.argv[1], limit_ms=20)
+    data2 = load_data(sys.argv[2], limit_ms=20)
     
     datasets = [
         (data1[0], data1[1], data1[2], 'PPK2'),

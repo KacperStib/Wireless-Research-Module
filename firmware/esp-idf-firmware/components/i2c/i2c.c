@@ -173,7 +173,7 @@ esp_err_t i2c_write_read(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t bytesT
 // Super szybki zapis i odczyt w jednej sekwencji
 esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t len)
 {	
-	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+	if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(10)) != pdTRUE)
         return ESP_ERR_TIMEOUT;
         
     // Makro I2C_LINK_RECOMMENDED_SIZE(n) — n = liczba komend w linku
@@ -193,7 +193,7 @@ esp_err_t i2c_write_read_fast(uint8_t ADDR, uint8_t REG, uint8_t *buf, uint8_t l
     
     i2c_master_stop(cmd);
 
-    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(10));
+    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(200));
     i2c_cmd_link_delete_static(cmd);
 	
 	xSemaphoreGive(i2c_mutex);

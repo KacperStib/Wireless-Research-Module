@@ -9,7 +9,7 @@
 uint8_t buf8[250];
 uint8_t len = sizeof(buf8);
 
-uint8_t lora_len = 20;
+uint8_t lora_len = 25;
 uint8_t espnow_len = 250;
 
 bool rtt_back = false;
@@ -43,8 +43,9 @@ void lora_send_sequence()
 	{
 		case TEST_IDLE:
 			lora_send_packet(buf8, lora_len); 
+			/*
 			vTaskDelay(10 / portTICK_PERIOD_MS); 			// Opoznienie zeby zlapac pik (LoRa jest wolniejsza)
-			current_mA_peak = ina219_find_peak(&t_end_tx);
+			current_mA_peak = ina219_find_peak(&t_end_tx, 50);
 			// Obliczanie czasu nadawania (tx_time)
 			if (t_end_tx != 0) 
 			{
@@ -54,12 +55,13 @@ void lora_send_sequence()
 			{
 				tx_time = (uint32_t)(esp_timer_get_time() - t_start);
 			}
+			*/
 			break;
 		
 		case TEST_GENERAL:
 			lora_send_packet(buf8, lora_len); 
 			vTaskDelay(10 / portTICK_PERIOD_MS); 			// Opoznienie zeby zlapac pik (LoRa jest wolniejsza)
-			current_mA_peak = ina219_find_peak(&t_end_tx);
+			current_mA_peak = ina219_find_peak(&t_end_tx, 50);
 			// Obliczanie czasu nadawania (tx_time)
 			if (t_end_tx != 0) 
 			{
@@ -187,7 +189,7 @@ void lora_receive_sequence()
 				// Zmierz RSSI
 				rssi = (int)lora_packet_rssi();					
 							
-				vTaskDelay(200 / portTICK_PERIOD_MS);
+				vTaskDelay(1000 / portTICK_PERIOD_MS);
 				sd_capture_and_log_profile("LORA", 100, NULL, NULL, NULL);
 							
 				ESP_LOGI(pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen, buf8);
@@ -280,8 +282,8 @@ void espnow_send_sequence()
 		case TEST_IDLE:
 			// Start nadawania ESP-NOW
 		    espnow_send(buf8, espnow_len);
-		                
-			current_mA_peak = ina219_find_peak(&t_end_tx);
+		    /*
+			current_mA_peak = ina219_find_peak(&t_end_tx, 120);
 					    	
 			// Obliczanie czasu nadawania (tx_time)
 			if (t_end_tx != 0) 
@@ -291,14 +293,15 @@ void espnow_send_sequence()
 			else 
 			{
 				tx_time = (uint32_t)(esp_timer_get_time() - t_start);
-		   	}		         
+		   	}		
+		   	*/         
 			break;
 		
 		case TEST_GENERAL:
 			// Start nadawania ESP-NOW
 		    espnow_send(buf8, espnow_len);
 		                
-			current_mA_peak = ina219_find_peak(&t_end_tx);
+			current_mA_peak = ina219_find_peak(&t_end_tx, 120);
 					    	
 			// Obliczanie czasu nadawania (tx_time)
 			if (t_end_tx != 0) 
@@ -391,7 +394,7 @@ void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *dat
 			break;
 			
 		case TEST_POWER:
-			vTaskDelay(200 / portTICK_PERIOD_MS);
+			vTaskDelay(1000 / portTICK_PERIOD_MS);
 			sd_capture_and_log_profile("ESPNOW", 100, NULL, NULL, NULL);
 			break;
 			
