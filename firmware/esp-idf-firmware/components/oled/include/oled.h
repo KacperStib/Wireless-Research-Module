@@ -83,7 +83,7 @@ void ssd1306_display_image(SSD1306_t * dev, int page, int seg, const uint8_t * i
 void ssd1306_display_text(SSD1306_t * dev, int page, const char * text, int text_len, bool invert);
 
 // Aktualizacja danych na ekranie
-void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, float gps_lon, 
-					radio_config_t radio, float current_mA_peak, int rssi, uint32_t tx_time);
+void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, float gps_lon, float per,
+					radio_config_t radio, float current_mA_peak, int rssi, int snr, uint32_t tx_time, bool connected);
 
 #endif // OLED_H

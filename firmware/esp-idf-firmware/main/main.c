@@ -46,8 +46,8 @@ void vOledTask(void *pv)
 {
 	for (;;) 
 	{
-		ssd1306_update(current_mA, gps_fix, gps_sats, gps_lat, gps_lon, 
-					radio_cfg, current_mA_peak, rssi, tx_time);
+		ssd1306_update(current_mA, gps_fix, gps_sats, gps_lat, gps_lon, per,
+					radio_cfg, current_mA_peak, rssi, snr, tx_time, connected);
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
@@ -59,6 +59,7 @@ void vLogTask(void *pv)
 	// Instancja zdarzenia
 	log_event_t ev;
 	power_profile_t pp;
+	log_per_t pl;
 	
     for (;;) 
     {
@@ -78,6 +79,15 @@ void vLogTask(void *pv)
                 sd_card_init();
                 
             sd_save_profile_to_csv(&pp);
+        }
+        
+        // 3. Kolejka logow packet lossow
+	    if (xQueueReceive(xPerQueue, &pl, pdMS_TO_TICKS(1000)) == pdTRUE) 
+        {	
+			if (!sd_card_ready)
+                sd_card_init();
+                
+            sd_save_per_to_csv(&pl);
         }
         
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -109,7 +119,7 @@ void vRadioTask(void *pv)
 			}
 		}
 		// ESPNOW
-		else 
+		else
 		{ 
 			// Tryb TX
 			if (radio_cfg.dir == RADIO_DIR_TX)
@@ -121,9 +131,16 @@ void vRadioTask(void *pv)
 		  	else 
 		  	{	
 				// Cala logika odbioru jest w callbacku, zarejestrowanym przy inicjalizacji
+				// zabepizczenie przy per
+				check_per_espnow();
 				vTaskDelay(pdMS_TO_TICKS(100));
 			}
 		}
+		// Czas od ostatniej odebranej wiadomosci
+		if ((esp_timer_get_time() / 1000) - last_recv >= connection_timeout)
+			connected = false;
+		else
+ 			connected = true;
 	}
 }
 
@@ -151,7 +168,6 @@ void app_main(void)
 
 	// Urchomienie i config ina219
 	ina219_power_on(0.2, 1.6);
-	//ina219_power_on(0.05, 6.4);
 	if (err != ESP_OK)
     	ESP_LOGE("INA219", "I2C CMD ERROR: 0x%x", err);	
 	vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -177,6 +193,8 @@ void app_main(void)
 	// Kolejka do zapisywania logow na SD
 	xLogQueue = xQueueCreate(8, sizeof(log_event_t));
 	xProfileQueue = xQueueCreate(2, sizeof(power_profile_t));
+	xPerQueue = xQueueCreate(2, sizeof(log_per_t));
+	
 	
 	// Rozpocznij Zadania
 	xTaskCreate(vRadioTask,  "RADIO",  12288, NULL, 5, NULL);

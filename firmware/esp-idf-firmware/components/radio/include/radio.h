@@ -16,6 +16,10 @@
 #define ASK_TAG 0xAA
 #define ANS_TAG 0xBB
 
+extern bool connected;
+extern uint16_t connection_timeout;
+extern uint32_t last_recv;
+
 extern uint8_t buf8[250];
 extern uint8_t len;
 
@@ -30,6 +34,8 @@ extern float current_mA_peak;
 
 // Zmienna przechowujaca RSSI
 extern int rssi;
+extern int snr;
+extern float per;
 
 // Zmienna czasu nadawania
 extern uint32_t tx_time;
@@ -38,5 +44,6 @@ void lora_send_sequence();
 void lora_receive_sequence();
 void espnow_send_sequence();
 void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+void check_per_espnow();
 
 #endif // RADIO_H

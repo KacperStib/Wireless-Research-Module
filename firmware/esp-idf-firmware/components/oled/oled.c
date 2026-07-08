@@ -1,4 +1,5 @@
 #include "include/oled.h"
+#include "dev_config.h"
 #include "include/font8x8_basic.h"
 #include "i2c.h"
 
@@ -69,8 +70,8 @@ void ssd1306_display_text(SSD1306_t * dev, int page, const char * text, int text
     }
 }
 
-void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, float gps_lon, 
-					radio_config_t radio, float current_mA_peak, int rssi, uint32_t tx_time)
+void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, float gps_lon, float per,
+					radio_config_t radio, float current_mA_peak, int rssi, int snr, uint32_t tx_time, bool connected)
 {
 	char buf[32];
 		
@@ -97,9 +98,10 @@ void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, 
 	// Technologia radiowa
 	memset(buf, ' ', sizeof(buf) - 1);
    	buf[sizeof(buf) - 1] = '\0';
-	sprintf(buf, "%s %s",
+	sprintf(buf, "%s %s %s",
 			radio_cfg.tech == RADIO_TECH_LORA ? "LORA" : "ESPNOW",
-			radio_cfg.dir ? "TX" : "RX");
+			radio_cfg.dir ? "TX" : "RX",
+			connected ? "   &" :"     ");
 	ssd1306_display_text(&dev, 4, buf, sizeof(buf) - 1, false);
 		
 	// Informacje o transmisji
@@ -107,9 +109,27 @@ void ssd1306_update(float current_mA, int gps_fix, int gps_sats, float gps_lat, 
     buf[sizeof(buf) - 1] = '\0';
    	// RSSI tylko w trybie RX
     if (radio_cfg.dir == RADIO_DIR_RX) 
-    {
-        sprintf(buf, "RSSI: %d dBm", rssi);
-        ssd1306_display_text(&dev, 5, buf, sizeof(buf) - 1, false);
+    {	
+		if(radio_cfg.tech == RADIO_TECH_LORA)
+        {
+			sprintf(buf, "RSI:%dSNR:%d", rssi, snr);
+        	ssd1306_display_text(&dev, 5, buf, sizeof(buf) - 1, false);
+		}
+		else{
+        	sprintf(buf, "RSSI: %d", rssi);
+        	ssd1306_display_text(&dev, 5, buf, sizeof(buf) - 1, false);
+        }
+        
+        if (radio_cfg.test == TEST_PER)
+        {
+			sprintf(buf, "PER: %.2f", per);
+        	ssd1306_display_text(&dev, 6, buf, sizeof(buf) - 1, false);
+		}
+		else
+		{
+        	memset(buf, ' ', sizeof(buf) - 1);               
+        	ssd1306_display_text(&dev, 6, buf, sizeof(buf) - 1, false);
+        }
    	} 
     // Pik pradowy w trybie TX
     else 

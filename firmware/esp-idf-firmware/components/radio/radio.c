@@ -5,6 +5,11 @@
 
 #include <inttypes.h>
 
+// Symbol polaczenia
+bool connected = false;
+uint16_t connection_timeout = 8000;
+uint32_t last_recv = 0;
+
 // Bufor wiadomosci
 uint8_t buf8[250];
 uint8_t len = sizeof(buf8);
@@ -20,6 +25,8 @@ float current_mA = 0;
 float current_mA_peak = 0;
 
 int rssi = 0;
+int snr = 0;
+float per;
 uint32_t tx_time = 0;
 
 // Test predkosci
@@ -61,7 +68,7 @@ void lora_send_sequence()
 		case TEST_GENERAL:
 			lora_send_packet(buf8, lora_len); 
 			vTaskDelay(10 / portTICK_PERIOD_MS); 			// Opoznienie zeby zlapac pik (LoRa jest wolniejsza)
-			current_mA_peak = ina219_find_peak(&t_end_tx, 50);
+			current_mA_peak = ina219_find_peak(&t_end_tx, 40);
 			// Obliczanie czasu nadawania (tx_time)
 			if (t_end_tx != 0) 
 			{
@@ -72,7 +79,7 @@ void lora_send_sequence()
 				tx_time = (uint32_t)(esp_timer_get_time() - t_start);
 			}
 			// Log tekstowy do pliku log.txt
-			sd_log_event("LORA",  true,  current_mA_peak, 0, gps_fix, gps_lat, gps_lon);
+			sd_log_event("LORA",  true,  current_mA_peak, 0, 0, gps_fix, gps_lat, gps_lon);
 			break;
 			
 		case TEST_POWER:
@@ -101,13 +108,26 @@ void lora_send_sequence()
 			break;
 			
 		case TEST_PER:
-			// Wysłanie serii 100 paczek
-		    for (int i = 0; i < 100; i++) {
-				//Numer sekwencyjny w pierwszym bajcie
-		        buf8[0] = (uint8_t)i;
-		        lora_send_packet(buf8, 1);
-		        vTaskDelay(pdMS_TO_TICKS(40));
-		    }
+			if (radio_cfg.lora.sf == 7)
+			{
+				// Wysłanie serii 100 paczek
+			    for (int i = 0; i < 100; i++) {
+					//Numer sekwencyjny w pierwszym bajcie
+			        buf8[0] = (uint8_t)i;
+			        lora_send_packet(buf8, 1);
+			        vTaskDelay(pdMS_TO_TICKS(50));
+			    }
+			}
+			else if (radio_cfg.lora.sf > 7)
+			{
+				// Wysłanie serii 10 paczek
+			    for (int i = 0; i < 10; i++) {
+					//Numer sekwencyjny w pierwszym bajcie
+			        buf8[0] = (uint8_t)i;
+			        lora_send_packet(buf8, 1);
+			        vTaskDelay(pdMS_TO_TICKS(500));
+			    }
+			}
 			break;
 		
 		case TEST_RTT:
@@ -150,7 +170,8 @@ void lora_send_sequence()
 }
 
 void lora_receive_sequence()
-{
+{	
+	
 	switch (radio_cfg.test)
 	{
 		case TEST_IDLE:
@@ -159,7 +180,8 @@ void lora_receive_sequence()
 			{
 				int rxLen = lora_receive_packet(buf8, lora_len);
 				// Zmierz RSSI
-				rssi = (int)lora_packet_rssi();				
+				rssi = (int)lora_packet_rssi();		
+				snr = (int)lora_packet_snr();		
 				ESP_LOGI(pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen, buf8);
 							
 			}
@@ -168,13 +190,15 @@ void lora_receive_sequence()
 		case TEST_GENERAL:
 			lora_receive();
 			if (lora_received()) 
-			{
+			{	
+				last_recv = esp_timer_get_time() / 1000;
 				int rxLen = lora_receive_packet(buf8, lora_len);
 				// Zmierz RSSI
 				rssi = (int)lora_packet_rssi();
-							
+				snr = (int)lora_packet_snr();	
+				
 				// Wrzuc log do kolejki dla karty SD
-				sd_log_event("LORA",  false, 0, rssi, gps_fix, gps_lat, gps_lon);
+				sd_log_event("LORA",  false, 0, rssi, snr, gps_fix, gps_lat, gps_lon);
 							
 				ESP_LOGI(pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen, buf8);
 							
@@ -187,7 +211,8 @@ void lora_receive_sequence()
 			{
 				int rxLen = lora_receive_packet(buf8, lora_len);
 				// Zmierz RSSI
-				rssi = (int)lora_packet_rssi();					
+				rssi = (int)lora_packet_rssi();	
+				snr = (int)lora_packet_snr();					
 							
 				vTaskDelay(1000 / portTICK_PERIOD_MS);
 				sd_capture_and_log_profile("LORA", 100, NULL, NULL, NULL);
@@ -222,6 +247,9 @@ void lora_receive_sequence()
 			lora_receive();
 			if (lora_received()) {
 		        int rxLen = lora_receive_packet(buf8, 1);
+		        last_recv = esp_timer_get_time() / 1000;
+		        rssi = (int)lora_packet_rssi();		
+				snr = (int)lora_packet_snr();
 		        ESP_LOGI("PER", "LoRa: %d", buf8[0]);
 		        if (rxLen > 0) {
 		            current_seq = buf8[0];
@@ -229,25 +257,37 @@ void lora_receive_sequence()
 		            // Inicjalizacja przy starcie serii
 		            if (current_seq == 0 || (current_seq < last_seq && last_seq != 0)) {
 		                total_received = 0;
-		                total_lost = 0;
+		                //total_lost = 0;
 		                speed_test_start = esp_timer_get_time();
 		            }
 		
 		            // Oblicz straty
+		            /*
 		            if (current_seq > (last_seq + 1) && last_seq != 0) {
 		                total_lost += (current_seq - last_seq - 1);
 		            }
-		
+					*/
 		            last_seq = current_seq;
+		            
 		            total_received++;
 				}
 			}
 		    // Podsumowanie przy 99. pakiecie
-		    if (current_seq == 99 || (time_elapsed > 5000 && total_received > 0)) {
-				float per = (float)total_lost / (float)(total_received + total_lost) * 100.0f;
+		    if ( ( ( (current_seq == 99 && radio_cfg.lora.sf == 7) || (current_seq == 9 && radio_cfg.lora.sf > 7) ) || (time_elapsed > 6000 && total_received > 0) ) && last_seq != 0) {
+				uint32_t total_expected = 100;
+				if (radio_cfg.lora.sf > 7)
+					total_expected = 10;
+					
+        		total_lost = total_expected - total_received;
+        		per = (100.0f * total_lost) / total_expected;
+				//float per = (float)total_lost / (float)(total_received + total_lost) * 100.0f;
 		       	ESP_LOGI("PER", "--- LORA PODSUMOWANIE ---");
 		        ESP_LOGI("PER", "Odebrano: %lu | Stracono: %lu | PER: %.2f%%", 
 		        total_received, total_lost, (double)per);
+		        	
+		        // Log na karte sd
+		        sd_log_per("LORA", per, rssi, snr, gps_lat, gps_lon);
+		        total_received = 0;
 				last_seq = 0; // Reset
 		    }
 			break;
@@ -314,7 +354,7 @@ void espnow_send_sequence()
 		   	}
 		                
 		    // Zapis zdarzenia do ogólnego logu
-		    sd_log_event("ESPNOW", true, current_mA_peak, 0,    gps_fix, gps_lat, gps_lon);
+		    sd_log_event("ESPNOW", true, current_mA_peak, 0,    0, gps_fix, gps_lat, gps_lon);
 			break;
 			
 		case TEST_POWER:
@@ -383,6 +423,7 @@ void espnow_send_sequence()
 void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {	
 	rssi = info->rx_ctrl->rssi;
+	last_recv = esp_timer_get_time() / 1000;
 	
 	switch (radio_cfg.test)
 	{
@@ -390,7 +431,7 @@ void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *dat
 			break;
 		
 		case TEST_GENERAL:
-			sd_log_event("ESPNOW", false, 0, rssi,   gps_fix, gps_lat, gps_lon);
+			sd_log_event("ESPNOW", false, 0, rssi, 0,  gps_fix, gps_lat, gps_lon);
 			break;
 			
 		case TEST_POWER:
@@ -416,7 +457,7 @@ void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *dat
 		case TEST_PER:
         
 	       	num = *data;
-
+			
 		    // Start nowej serii
 		    if (num == 0 || (num < last_seq && last_seq != 0)) 
 		    {
@@ -436,12 +477,14 @@ void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *dat
 		    // Ostatni pakiet (99) lub Watchdog (5s)
 		    if (num == 99 || (time_elapsed > 5000 && total_received > 0)) 
 		    {
-		        float per = (float)total_lost / (float)(total_received + total_lost) * 100.0f;
+		        per = (float)total_lost / (float)(total_received + total_lost) * 100.0f;
 		        
 		        ESP_LOGI("PER", "--- PODSUMOWANIE ---");
 		        ESP_LOGI("PER", "Odebrano: %" PRIu32 " | Stracono: %" PRIu32 " | Packet Loss: %.2f%%", 
 		                 total_received, total_lost, (double)per);
-		        
+		                 
+		        // Log na karte sd
+				sd_log_per("ESPNOW", per, rssi, 0, gps_lat, gps_lon);	
 		        last_seq = 0;
 		    }
 			break;
@@ -457,4 +500,20 @@ void espnow_receive_sequence(const esp_now_recv_info_t *info, const uint8_t *dat
 	 
     ESP_LOGD(TAG, "RX %d B od " MACSTR, len, MAC2STR(info->src_addr));
     
+}
+
+void check_per_espnow()
+{
+	if (radio_cfg.test == TEST_PER && total_received > 0 &&
+	esp_timer_get_time() - speed_test_start > 5000000 && last_seq !=0)
+	{
+	per = (float)total_lost / (float)(total_received + total_lost) * 100.0f;
+			        
+	ESP_LOGI("PER", "--- PODSUMOWANIE ---");
+	ESP_LOGI("PER", "Odebrano: %" PRIu32 " | Stracono: %" PRIu32 " | Packet Loss: %.2f%%", 
+	total_received, total_lost, (double)per);
+	// Log na karte sd
+	sd_log_per("ESPNOW", per, rssi, 0, gps_lat, gps_lon);		        
+	last_seq = 0;
+	}
 }

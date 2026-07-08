@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "include/sd_card.h"
 #include "ina219.h"
+#include "radio.h"
 
 char LOG_FILE_NAME[64] = {0,};
 char PP_FILE_NAME[64] = {0,};
@@ -10,6 +11,7 @@ bool sd_card_ready = 0;
 // Kolejki do zapisu
 QueueHandle_t xLogQueue = NULL;
 QueueHandle_t xProfileQueue = NULL;
+QueueHandle_t xPerQueue = NULL;
 
 static power_profile_t tx_profile;               
 
@@ -129,13 +131,14 @@ bool file_exists(const char *path)
 }
 
 // Sformatowanie zdarzenia i wyslanie go do kolejki logowania SD
-esp_err_t sd_log_event(const char *tech, bool is_tx, float current_mA_peak, int rssi,
+esp_err_t sd_log_event(const char *tech, bool is_tx, float current_mA_peak, int rssi, int snr,
                        bool gps_fix, float gps_lat, float gps_lon)
 {
     log_event_t ev = {
         .is_tx   = is_tx,
         .peak_mA = current_mA_peak,
         .rssi    = rssi,
+        .snr = snr,
         .has_gps = gps_fix,
         .lat     = gps_lat,
         .lon     = gps_lon,
@@ -170,13 +173,14 @@ void sd_save_event_to_csv(const log_event_t *ev)
     }
 
     if (write_header)
-        fprintf(f, "Tech,Dir,Peak_mA,RSSI,GPS,Lat,Lon\n");
+        fprintf(f, "Tech,Dir,Peak_mA,RSSI,SNR,GPS,Lat,Lon\n");
 
-    fprintf(f, "%s,%s,%.2f,%d,%s,%.5f,%.5f\n",
+    fprintf(f, "%s,%s,%.2f,%d,%d,%s,%.5f,%.5f\n",
         ev->tech,
         ev->is_tx ? "TX" : "RX",
         ev->is_tx ? ev->peak_mA : 0.0f,
         ev->is_tx ? 0 : ev->rssi,
+        ev->is_tx ? 0 : ev->snr,
         ev->has_gps ? "Y" : "N",
         ev->has_gps ? ev->lat : 0.0f,
         ev->has_gps ? ev->lon : 0.0f);
@@ -232,4 +236,57 @@ void sd_save_profile_to_csv(const power_profile_t *prof)
     }
     fclose(f);
     ESP_LOGI("SD", "Profil zapisany: %s (probek: %lu)", PP_FILE_NAME, prof->total_samples);
+}
+
+// Sformatowanie zdarzenia PER i wyslanie go do kolejki logowania SD
+esp_err_t sd_log_per(const char *tech, float per, int rssi, int snr, float lat, float lon)
+{
+    log_per_t pe = {
+        .per = per,
+        .rssi = rssi,
+        .snr = snr,
+        .lat = lat,
+        .lon = lon,
+    };
+    strncpy(pe.tech, tech, sizeof(pe.tech) - 1);
+    pe.tech[sizeof(pe.tech) - 1] = '\0';
+
+    if (xQueueSend(xPerQueue, &pe, 0) != pdTRUE)
+        return ESP_ERR_NO_MEM;
+
+    return ESP_OK;
+}
+
+#define PER_FILE MOUNT_POINT "/per.csv"
+
+void sd_save_per_to_csv(const log_per_t *pe)
+{
+    if (!sd_card_ready) return;
+
+    // Przy pierwszym zapisie — sprawdz czy plik istnieje, jesli nie to dodaj naglowek
+    bool write_header = false;
+    FILE *check = fopen(PER_FILE, "r");
+    if (check == NULL)
+        write_header = true;
+    else
+        fclose(check);
+
+    FILE *f = fopen(PER_FILE, "a");
+    if (f == NULL) {
+        ESP_LOGE("SD", "Nie udalo sie otworzyc per.csv!");
+        return;
+    }
+
+    if (write_header)
+        fprintf(f, "Tech,PER,RSSI,SNR,Lat,Lon\n");
+
+    fprintf(f, "%s,%.2f,%d,%d,%.5f,%.5f\n",
+        pe->tech,
+        pe->per,
+        pe->rssi,
+        pe->snr,
+        pe->lat,
+        pe->lon);
+
+    fclose(f);
 }
