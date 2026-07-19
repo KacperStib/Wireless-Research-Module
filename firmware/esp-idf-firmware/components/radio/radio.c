@@ -101,7 +101,7 @@ void lora_send_sequence()
 			for (int i = 0; i < 50; i++)
 		    {	
 				lora_sent = false;
-		      	lora_send_packet(buf8, 250);
+		      	lora_send_packet(buf8, 25);
 		      	while(!lora_sent);
 		    }
 		    vTaskDelay(1);
@@ -235,7 +235,7 @@ void lora_receive_sequence()
 			
 			if (esp_timer_get_time() - speed_test_start >= 1000000)
 			{
-				ESP_LOGI("TEST", "Speed Test:%u - %0.3fMbps", packets_received, (packets_received * 8.0f * 250.0f) / 1000000.0f);
+				ESP_LOGI("TEST", "Speed Test:%u - %0.3fbps", packets_received, (packets_received * 8.0f * 25.0f) / 1/*1000000.0f*/);
 				packets_received = 0;
         		speed_test_start = 0;
         	}

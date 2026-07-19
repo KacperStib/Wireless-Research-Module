@@ -9,14 +9,15 @@ import numpy as np
 # =============================================================================
 # KONFIGURACJA - WSPÓŁRZĘDNE STACJI
 # =============================================================================
-STACJA_LAT = 50.323920527298405
-STACJA_LON = 18.57283895677652
+#pole
+STACJA_LAT= 50.33091213361291
+STACJA_LON = 18.561157982799322
 
 # =============================================================================
 # 1. WCZYTANIE DANYCH
 # =============================================================================
 # Zakładam, że plik nazywa się DATA.CSV
-df = pd.read_csv('DATA.CSV')
+df = pd.read_csv('PER.CSV')
 
 # =============================================================================
 # 2. OBLICZENIA (Wzór Haversine)
@@ -40,13 +41,13 @@ for tech in df['Tech'].unique():
     subset = df[df['Tech'] == tech]
     plt.scatter(subset['dist_m'], subset['PER'], label=tech, alpha=0.6, s=40)
 
-plt.title('Zależność PER od odległości od stacji bazowej', fontsize=18)
-plt.xlabel('Odległość [metry]', fontsize=14)
-plt.ylabel('PER (Packet Error Rate)', fontsize=14)
-plt.legend(title="Technologia")
+plt.title('Zależność utraconych pakietów od odległości od stacji bazowej', fontsize=20)
+plt.xlabel('Odległość [metry]', fontsize=20)
+plt.ylabel('PL (Packet Loss)', fontsize=20)
+plt.legend(fontsize=20)
 plt.grid(True, linestyle='--', alpha=0.5)
 
 # Zapis do pliku
 plt.savefig('wykres_per_dystans.png', dpi=300, bbox_inches='tight')
-print("Wykres PER vs Odległość został zapisany jako: wykres_per_dystans.png")
+print("Wykres utraconych pakietów vs Odległość został zapisany jako: wykres_per_dystans.png")
 plt.show()

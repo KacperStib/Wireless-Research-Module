@@ -93,11 +93,11 @@ float ina219_find_peak(int64_t *rx_end, uint8_t threshold)
 {
     float peak = 0, sample = 0;
     TickType_t t_start = xTaskGetTickCount();
-    TickType_t t_end = t_start + pdMS_TO_TICKS(100);
+    TickType_t t_end = t_start + pdMS_TO_TICKS(10000);
 	
     while (xTaskGetTickCount() < t_end) 
     {
-        sample = ina219_read_current();
+        sample = ina219_read_current() * 1000;
         if (sample > peak) peak = sample; 
 
         // Bezpiecznik: jesli prąd spadl poniżej progu
@@ -106,7 +106,7 @@ float ina219_find_peak(int64_t *rx_end, uint8_t threshold)
         vTaskDelay(1);
     }
     *rx_end = esp_timer_get_time();
-    return peak * 1000;
+    return peak;
 }
 
 // Profilowanie energetyczne - przekaz strukture, czas trwania i wskaznik do zwrotu czasu piku

@@ -11,12 +11,26 @@ import numpy as np
 # =============================================================================
 #STACJA_LAT = 50.32378287488028
 #STACJA_LON = 18.57256764033666
-STACJA_LAT=50.323920527298405 
-STACJA_LON =18.57283895677652
+
+#pplot
+#STACJA_LAT=50.323920527298405 
+#STACJA_LON =18.57283895677652
+
+#POLE
+#STACJA_LAT= 50.33091213361291
+#STACJA_LON = 18.561157982799322
+
+#OSIEDLE
+#STACJA_LAT=50.30064674255885
+#STACJA_LON =18.64296829817275
+
+#MASZT
+STACJA_LAT=50.32369084758339
+STACJA_LON =18.572302242811713
 # =============================================================================
 # 1. WCZYTANIE I PRZYGOTOWANIE DANYCH
 # =============================================================================
-df_raw = pd.read_csv('EVENTS.CSV')
+df_raw = pd.read_csv('EVENTS_HIGH.CSV')
 df_raw.rename(columns={'Lat': 'lat', 'Lon': 'lon', 'RSSI': 'rssi', 'Tech': 'tech'}, inplace=True)
 
 # Tylko RX z GPS fixem
@@ -34,6 +48,22 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
 
 df['dist_m'] = haversine(df['lat'], df['lon'], STACJA_LAT, STACJA_LON)
+
+# =============================================================================
+# 2.1. ZNALEZIENIE NAJDALSZYCH PUNKTÓW PER TECH
+# =============================================================================
+print("\n=== NAJDALSZE ZASIĘGI PER TECHNOLOGIA ===")
+
+# Grupowanie po technologii i znajdowanie wiersza z max dystansem
+for tech in df['tech'].unique():
+    subset = df[df['tech'] == tech]
+    najdalszy = subset.loc[subset['dist_m'].idxmax()]
+    
+    print(f"Technologia: {tech}")
+    print(f"  - Najdalsza odległość: {najdalszy['dist_m']:.2f} m")
+    print(f"  - Współrzędne: Lat {najdalszy['lat']:.6f}, Lon {najdalszy['lon']:.6f}")
+    print(f"  - RSSI w tym punkcie: {najdalszy['rssi']} dBm")
+    print("-" * 30)
 
 # =============================================================================
 # 3. GENEROWANIE WYKRESU

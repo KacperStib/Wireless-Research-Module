@@ -24,7 +24,7 @@ The firmware is designed with a highly modular component-based architecture comp
     ├── sd_card/            # FATFS-backed microSD card logging interface (SPI)
     ├── shell_mng/          # Interactive CLI developer shell for debugging
     └── spi/                # Shared SPI master bus initializer
-
+```
 ---
 
 ## Power Supply & Hardware Connection
